@@ -1,0 +1,27 @@
+[package]
+name = "auction-spike"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+concordium-std = "=10.1.0"
+
+[dev-dependencies]
+concordium-smart-contract-testing = "=4.4.0"
+
+[features]
+default = ["std"]
+std = ["concordium-std/std"]
+build-schema = ["concordium-std/build-schema"]
+
+[profile.release]
+opt-level = "s"
+codegen-units = 1
+panic = "abort"
+overflow-checks = true
+lto = true

@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+contracts/**/target/
+contracts/**/module.wasm.v1
+contracts/**/schema.bin

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs><style>
+    .bg{fill:#f7f7f5}.panel{fill:#fff;stroke:#232323;stroke-width:2}.soft{fill:#efefec;stroke:#777;stroke-width:1.5}.dark{fill:#232323}.green{fill:#dff4e7;stroke:#26734d;stroke-width:1.5}.blue{fill:#e3eefc;stroke:#386b9c;stroke-width:1.5}.amber{fill:#fff0c7;stroke:#9a6914;stroke-width:1.5}.title{font:700 34px Arial,"PingFang SC",sans-serif;fill:#171717}.h2{font:700 22px Arial,"PingFang SC",sans-serif;fill:#171717}.body{font:17px Arial,"PingFang SC",sans-serif;fill:#252525}.small{font:14px Arial,"PingFang SC",sans-serif;fill:#555}.mono{font:15px Menlo,monospace;fill:#252525}.white{fill:#fff}.line{stroke:#232323;stroke-width:2;fill:none}.dash{stroke:#777;stroke-width:1.5;stroke-dasharray:7 7;fill:none}
+  </style></defs>
+  <rect class="bg" width="1440" height="900"/>
+  <rect class="panel" x="35" y="28" width="1370" height="78" rx="16"/>
+  <text class="title" x="70" y="78">SurplusBid</text><text class="small" x="1250" y="60">Concordium</text><text class="body" x="1250" y="84">TESTNET</text>
+  <g transform="translate(480 55)"><circle cx="0" cy="0" r="17" class="green"/><text class="small" x="-4" y="5">✓</text><line x1="17" y1="0" x2="92" y2="0" class="line"/><circle cx="110" cy="0" r="17" class="green"/><text class="small" x="106" y="5">✓</text><line x1="127" y1="0" x2="202" y2="0" class="line"/><circle cx="220" cy="0" r="17" class="dark"/><text class="white small" x="216" y="5">3</text><line x1="237" y1="0" x2="312" y2="0" class="line"/><circle cx="330" cy="0" r="17" class="soft"/><text class="small" x="326" y="5">4</text></g>
+  <text class="title" x="55" y="162">03 · 结果：截止后按固定规则结算</text>
+
+  <rect class="panel" x="55" y="195" width="390" height="420" rx="18"/>
+  <text class="h2" x="80" y="235">结算触发</text>
+  <line class="line" x1="105" y1="290" x2="385" y2="290"/>
+  <circle cx="120" cy="290" r="13" class="soft"/><circle cx="365" cy="290" r="13" class="green"/>
+  <text class="small" x="80" y="330">截止前</text><text class="small" x="323" y="330">截止后</text>
+  <rect class="soft" x="80" y="360" width="340" height="50" rx="10"/><text class="body" x="137" y="391">Finalize · 合约拒绝</text>
+  <rect class="dark" x="80" y="425" width="340" height="58" rx="10"/><text class="white body" x="141" y="461">触发 Finalize</text>
+  <text class="small" x="80" y="522">演示中：卖家触发</text>
+  <text class="small" x="80" y="551">协议上：任何账户均可触发</text>
+  <text class="small" x="80" y="580">触发者不能修改赢家、价格或分账</text>
+
+  <rect class="panel" x="470" y="195" width="420" height="420" rx="18"/>
+  <text class="h2" x="495" y="235">合约计算</text>
+  <rect class="green" x="495" y="260" width="370" height="62" rx="10"/><text class="body" x="520" y="286">赢家</text><text class="h2" x="700" y="296">Buyer B</text>
+  <text class="mono" x="510" y="360">surplus = 6 - 2 = 4 CCD</text>
+  <text class="mono" x="510" y="400">price = 2 + (4 / 2) = 4 CCD</text>
+  <text class="mono" x="510" y="440">fee = 4 × 10% = 0.4 CCD</text>
+  <path class="dash" d="M495 468 H865"/>
+  <text class="small" x="510" y="501">费用触发条件</text>
+  <text class="body" x="510" y="532">4 CCD ≥ 4 CCD × 10%</text>
+  <text class="small" x="510" y="565">买家承担 0.2 · 卖家承担 0.2</text>
+  <rect class="amber" x="495" y="580" width="370" height="26" rx="10"/><text class="small" x="574" y="598">当前演示定价规则</text>
+
+  <rect class="panel" x="915" y="195" width="470" height="420" rx="18"/>
+  <text class="h2" x="940" y="235">资金分配 · 合计 10 CCD</text>
+  <g transform="translate(940 265)">
+    <rect class="blue" width="200" height="112" rx="12"/><text class="small" x="18" y="30">Buyer A 退款</text><text class="h2" x="18" y="70">4.0 CCD</text><text class="small" x="18" y="94">未中标，全额退款</text>
+    <rect class="blue" x="220" width="200" height="112" rx="12"/><text class="small" x="238" y="30">Buyer B 退款</text><text class="h2" x="238" y="70">1.8 CCD</text><text class="small" x="238" y="94">6 − 4 − 0.2</text>
+    <rect class="green" y="135" width="200" height="112" rx="12"/><text class="small" x="18" y="165">Seller 收入</text><text class="h2" x="18" y="205">3.8 CCD</text><text class="small" x="18" y="229">4 − 0.2</text>
+    <rect class="amber" x="220" y="135" width="200" height="112" rx="12"/><text class="small" x="238" y="165">Platform 收入</text><text class="h2" x="238" y="205">0.4 CCD</text><text class="small" x="238" y="229">双方费用合计</text>
+  </g>
+  <rect class="green" x="940" y="540" width="420" height="50" rx="10"/><text class="body" x="1021" y="571">FINALIZED · 合约余额 0</text>
+
+  <rect class="panel" x="55" y="650" width="650" height="190" rx="16"/>
+  <text class="h2" x="80" y="690">想让评委相信什么</text>
+  <text class="body" x="80" y="728">截止时间有链上约束；调用者只负责触发，结果由合约决定。</text>
+  <text class="small" x="80" y="770">B 中标 · 当前成交价 4 · 双方均摊剩余价值费用</text>
+  <path class="dash" d="M80 798 H650"/><text class="small" x="80" y="826">再次结算必须被拒绝</text>
+  <rect class="panel" x="735" y="650" width="650" height="190" rx="16"/>
+  <text class="h2" x="760" y="690">凭什么相信</text>
+  <text class="body" x="760" y="728">结算交易、合约最终状态及四方资金变化互相一致。</text>
+  <text class="small" x="760" y="770">4 + 1.8 + 3.8 + 0.4 = 10 CCD</text>
+  <path class="dash" d="M760 798 H1330"/><text class="small" x="760" y="826">新费用规则尚待实现与 Testnet 复验</text>
+</svg>

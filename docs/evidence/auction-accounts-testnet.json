@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "network": "Concordium Testnet",
+  "genesis": "4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796",
+  "blockHash": "7e1c5e289936aefa321d95e9c1ca5353cbcaa2f42bcf4fc08ab10ff3892e7cae",
+  "accounts": [
+    {
+      "role": "buyerA",
+      "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+      "balanceCcd": "20000.000000",
+      "availableCcd": "20000.000000",
+      "nonce": "1"
+    },
+    {
+      "role": "buyerB",
+      "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+      "balanceCcd": "20000.000000",
+      "availableCcd": "20000.000000",
+      "nonce": "1"
+    },
+    {
+      "role": "seller",
+      "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+      "balanceCcd": "19789.330204",
+      "availableCcd": "19789.330204",
+      "nonce": "6"
+    },
+    {
+      "role": "platform",
+      "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+      "balanceCcd": "0.000000",
+      "availableCcd": "0.000000",
+      "nonce": "1"
+    }
+  ],
+  "rpcRequests": 9,
+  "transactionSent": false,
+  "timeUtc": "2026-10-23T06:20:48.966Z"
+}

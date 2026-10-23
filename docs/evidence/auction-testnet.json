@@ -1,0 +1,987 @@
+{
+  "network": "Concordium Testnet",
+  "dataKind": "Real testnet transactions with synthetic auction inputs; no off-chain service delivered",
+  "capturedAt": "2026-10-23T07:19:06.071Z",
+  "done": [
+    {
+      "step": "deploy",
+      "role": "seller",
+      "hash": "8a3cdca6fc2fad8a82467722d94154bc1f7cecf2c403f5523caa01a1cec10de8",
+      "finalized": true,
+      "networkFeeCcd": "357.303091",
+      "blockHash": "7f56e666f30c3e1648b8753d9e2568ba7b9ebb6c5dcd5c2fb7412176c08383b8",
+      "before": {
+        "blockHash": "e372034712fc2327215e2c346622e8386688b9ef0fdd45ac1a8682a82dd580fc",
+        "blockHeight": "49839351",
+        "blockTime": "2026-10-23T06:29:51.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19789330204",
+            "balanceCcd": "19789.330204",
+            "availableMicro": "19789330204",
+            "nonce": "6"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        }
+      },
+      "after": {
+        "blockHash": "7f56e666f30c3e1648b8753d9e2568ba7b9ebb6c5dcd5c2fb7412176c08383b8",
+        "blockHeight": "49839376",
+        "blockTime": "2026-10-23T06:30:41.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19432027113",
+            "balanceCcd": "19432.027113",
+            "availableMicro": "19432027113",
+            "nonce": "7"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        }
+      }
+    },
+    {
+      "step": "init",
+      "role": "seller",
+      "hash": "c51606e1bde132b5b86acd35bffcbc8b5652f5b73e4ea8d78747c078f1b82547",
+      "finalized": true,
+      "networkFeeCcd": "7.770681",
+      "blockHash": "e1bbd1c476b7eac45d265b9fddf3b54c0b1503a3067f78820d177c035c168057",
+      "before": {
+        "blockHash": "e011f7fdd67f17fbdf221dd1f76b1660af6c76527cd5af1107726b3e24d055ca",
+        "blockHeight": "49840533",
+        "blockTime": "2026-10-23T07:09:15.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19418567297",
+            "balanceCcd": "19418.567297",
+            "availableMicro": "19418567297",
+            "nonce": "9"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        }
+      },
+      "after": {
+        "blockHash": "e1bbd1c476b7eac45d265b9fddf3b54c0b1503a3067f78820d177c035c168057",
+        "blockHeight": "49840540",
+        "blockTime": "2026-10-23T07:09:29.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19410796616",
+            "balanceCcd": "19410.796616",
+            "availableMicro": "19410796616",
+            "nonce": "10"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        },
+        "contractBalanceMicro": "0",
+        "state": {
+          "allocations": [],
+          "bids": [],
+          "buyer_fee": "200000",
+          "phase": {
+            "Open": []
+          },
+          "rules": {
+            "capacity": "1",
+            "deadline": "2026-10-23T07:14:15.469+00:00",
+            "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "max_bids": "2",
+            "reserve": "2000000",
+            "service_id": "testnet-auction-20261023"
+          },
+          "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+          "seller_fee": "200000",
+          "total_deposited": "0"
+        }
+      }
+    },
+    {
+      "step": "bidA",
+      "role": "buyerA",
+      "hash": "8f5881b038ed923fb118115125922852bd36f96645b182428b1a4fd3cf0abda3",
+      "finalized": true,
+      "networkFeeCcd": "7.486301",
+      "blockHash": "fa5b7ab1b33a3b0cd40bd8c57920a2314c5004e68fcb3e56ef133fa698d8e9a9",
+      "before": {
+        "blockHash": "5e17bc1e68022136b0068032ef8345d16cc6e8ce7e5a6f038b1ddd02d4ba9df3",
+        "blockHeight": "49840551",
+        "blockTime": "2026-10-23T07:09:51.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19410796616",
+            "balanceCcd": "19410.796616",
+            "availableMicro": "19410796616",
+            "nonce": "10"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        },
+        "contractBalanceMicro": "0",
+        "state": {
+          "allocations": [],
+          "bids": [],
+          "buyer_fee": "200000",
+          "phase": {
+            "Open": []
+          },
+          "rules": {
+            "capacity": "1",
+            "deadline": "2026-10-23T07:14:15.469+00:00",
+            "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "max_bids": "2",
+            "reserve": "2000000",
+            "service_id": "testnet-auction-20261023"
+          },
+          "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+          "seller_fee": "200000",
+          "total_deposited": "0"
+        }
+      },
+      "after": {
+        "blockHash": "fa5b7ab1b33a3b0cd40bd8c57920a2314c5004e68fcb3e56ef133fa698d8e9a9",
+        "blockHeight": "49840575",
+        "blockTime": "2026-10-23T07:10:39.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "19988313699",
+            "balanceCcd": "19988.313699",
+            "availableMicro": "19988313699",
+            "nonce": "2"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19410796616",
+            "balanceCcd": "19410.796616",
+            "availableMicro": "19410796616",
+            "nonce": "10"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        },
+        "contractBalanceMicro": "4200000",
+        "state": {
+          "allocations": [],
+          "bids": [
+            {
+              "amount": "4000000",
+              "bidder": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "sequence": "0"
+            }
+          ],
+          "buyer_fee": "200000",
+          "phase": {
+            "Open": []
+          },
+          "rules": {
+            "capacity": "1",
+            "deadline": "2026-10-23T07:14:15.469+00:00",
+            "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "max_bids": "2",
+            "reserve": "2000000",
+            "service_id": "testnet-auction-20261023"
+          },
+          "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+          "seller_fee": "200000",
+          "total_deposited": "4200000"
+        }
+      }
+    },
+    {
+      "step": "finalizeSingle",
+      "role": "seller",
+      "hash": "66fe74bd77a4f810b05bab2778a1b1f16317c7ec910bea1abe2337c093f920bc",
+      "finalized": true,
+      "networkFeeCcd": "12.740219",
+      "blockHash": "f55b05456a05d4b835891c899721593163fe889970f77a656bb3f44bcb4533c3",
+      "before": {
+        "blockHash": "7eab4a75a97a318217a34ea56c39f871eb26a7d9143b4262c7dc8bb5e8a2c458",
+        "blockHeight": "49840776",
+        "blockTime": "2026-10-23T07:17:21.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "19988313699",
+            "balanceCcd": "19988.313699",
+            "availableMicro": "19988313699",
+            "nonce": "2"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19410796616",
+            "balanceCcd": "19410.796616",
+            "availableMicro": "19410796616",
+            "nonce": "10"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "0",
+            "balanceCcd": "0.000000",
+            "availableMicro": "0",
+            "nonce": "1"
+          }
+        },
+        "contractBalanceMicro": "4200000",
+        "state": {
+          "allocations": [],
+          "bids": [
+            {
+              "amount": "4000000",
+              "bidder": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "sequence": "0"
+            }
+          ],
+          "buyer_fee": "200000",
+          "phase": {
+            "Open": []
+          },
+          "rules": {
+            "capacity": "1",
+            "deadline": "2026-10-23T07:14:15.469+00:00",
+            "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "max_bids": "2",
+            "reserve": "2000000",
+            "service_id": "testnet-auction-20261023"
+          },
+          "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+          "seller_fee": "200000",
+          "total_deposited": "4200000"
+        }
+      },
+      "after": {
+        "blockHash": "f55b05456a05d4b835891c899721593163fe889970f77a656bb3f44bcb4533c3",
+        "blockHeight": "49840783",
+        "blockTime": "2026-10-23T07:17:35.469Z",
+        "accounts": {
+          "buyerA": {
+            "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+            "balanceMicro": "19989313699",
+            "balanceCcd": "19989.313699",
+            "availableMicro": "19989313699",
+            "nonce": "2"
+          },
+          "buyerB": {
+            "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+            "balanceMicro": "20000000000",
+            "balanceCcd": "20000.000000",
+            "availableMicro": "20000000000",
+            "nonce": "1"
+          },
+          "seller": {
+            "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+            "balanceMicro": "19400856397",
+            "balanceCcd": "19400.856397",
+            "availableMicro": "19400856397",
+            "nonce": "11"
+          },
+          "platform": {
+            "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "balanceMicro": "400000",
+            "balanceCcd": "0.400000",
+            "availableMicro": "400000",
+            "nonce": "1"
+          }
+        },
+        "contractBalanceMicro": "0",
+        "state": {
+          "allocations": [
+            {
+              "buyer_refund": "1000000",
+              "platform_receives": "400000",
+              "price": "3000000",
+              "seller_receives": "2800000",
+              "sequence": "0",
+              "won": true
+            }
+          ],
+          "bids": [
+            {
+              "amount": "4000000",
+              "bidder": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "sequence": "0"
+            }
+          ],
+          "buyer_fee": "200000",
+          "phase": {
+            "Settled": []
+          },
+          "rules": {
+            "capacity": "1",
+            "deadline": "2026-10-23T07:14:15.469+00:00",
+            "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+            "max_bids": "2",
+            "reserve": "2000000",
+            "service_id": "testnet-auction-20261023"
+          },
+          "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+          "seller_fee": "200000",
+          "total_deposited": "4200000"
+        }
+      }
+    }
+  ],
+  "moduleRef": "b132b7acf75d5614fa5999a10dc87b24083e78e647f2568bb9f627aa7ecd82a8",
+  "roles": {
+    "buyerA": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+    "buyerB": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+    "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+    "platform": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4"
+  },
+  "previousRounds": [
+    {
+      "address": {
+        "index": "13004",
+        "subindex": "0"
+      },
+      "params": {
+        "service_id": "testnet-auction-20261023",
+        "reserve": "2000000",
+        "capacity": 1,
+        "max_bids": 2,
+        "deadline": "2026-10-23T06:34:01.469Z",
+        "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4"
+      },
+      "done": [
+        {
+          "step": "deploy",
+          "role": "seller",
+          "hash": "8a3cdca6fc2fad8a82467722d94154bc1f7cecf2c403f5523caa01a1cec10de8",
+          "finalized": true,
+          "networkFeeCcd": "357.303091",
+          "blockHash": "7f56e666f30c3e1648b8753d9e2568ba7b9ebb6c5dcd5c2fb7412176c08383b8",
+          "before": {
+            "blockHash": "e372034712fc2327215e2c346622e8386688b9ef0fdd45ac1a8682a82dd580fc",
+            "blockHeight": "49839351",
+            "blockTime": "2026-10-23T06:29:51.469Z",
+            "accounts": {
+              "buyerA": {
+                "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "buyerB": {
+                "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "seller": {
+                "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+                "balanceMicro": "19789330204",
+                "balanceCcd": "19789.330204",
+                "availableMicro": "19789330204",
+                "nonce": "6"
+              },
+              "platform": {
+                "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "balanceMicro": "0",
+                "balanceCcd": "0.000000",
+                "availableMicro": "0",
+                "nonce": "1"
+              }
+            }
+          },
+          "after": {
+            "blockHash": "7f56e666f30c3e1648b8753d9e2568ba7b9ebb6c5dcd5c2fb7412176c08383b8",
+            "blockHeight": "49839376",
+            "blockTime": "2026-10-23T06:30:41.469Z",
+            "accounts": {
+              "buyerA": {
+                "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "buyerB": {
+                "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "seller": {
+                "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+                "balanceMicro": "19432027113",
+                "balanceCcd": "19432.027113",
+                "availableMicro": "19432027113",
+                "nonce": "7"
+              },
+              "platform": {
+                "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "balanceMicro": "0",
+                "balanceCcd": "0.000000",
+                "availableMicro": "0",
+                "nonce": "1"
+              }
+            }
+          }
+        },
+        {
+          "step": "init",
+          "role": "seller",
+          "hash": "60b5301ee7e79f4e70f2ef3e689dfc2c03faa14b77f5d94eb1cf864415a79ba5",
+          "finalized": true,
+          "networkFeeCcd": "7.765297",
+          "blockHash": "8ebf5b991ca05cb4e550025af91a19c435604e67fe98c360b1fd73606c919cd6",
+          "before": {
+            "blockHash": "e70f77a7bd300bded23577d30a3b4214e09fbb8ad888c9ff70856739e0f0e74a",
+            "blockHeight": "49839386",
+            "blockTime": "2026-10-23T06:31:01.469Z",
+            "accounts": {
+              "buyerA": {
+                "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "buyerB": {
+                "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "seller": {
+                "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+                "balanceMicro": "19432027113",
+                "balanceCcd": "19432.027113",
+                "availableMicro": "19432027113",
+                "nonce": "7"
+              },
+              "platform": {
+                "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "balanceMicro": "0",
+                "balanceCcd": "0.000000",
+                "availableMicro": "0",
+                "nonce": "1"
+              }
+            }
+          },
+          "after": {
+            "blockHash": "8ebf5b991ca05cb4e550025af91a19c435604e67fe98c360b1fd73606c919cd6",
+            "blockHeight": "49839406",
+            "blockTime": "2026-10-23T06:31:41.469Z",
+            "accounts": {
+              "buyerA": {
+                "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "buyerB": {
+                "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "seller": {
+                "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+                "balanceMicro": "19424261816",
+                "balanceCcd": "19424.261816",
+                "availableMicro": "19424261816",
+                "nonce": "8"
+              },
+              "platform": {
+                "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "balanceMicro": "0",
+                "balanceCcd": "0.000000",
+                "availableMicro": "0",
+                "nonce": "1"
+              }
+            },
+            "contractBalanceMicro": "0",
+            "state": {
+              "allocations": [],
+              "bids": [],
+              "buyer_fee": "200000",
+              "phase": {
+                "Open": []
+              },
+              "rules": {
+                "capacity": "1",
+                "deadline": "2026-10-23T06:34:01.469+00:00",
+                "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "max_bids": "2",
+                "reserve": "2000000",
+                "service_id": "testnet-auction-20261023"
+              },
+              "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "seller_fee": "200000",
+              "total_deposited": "0"
+            }
+          }
+        },
+        {
+          "step": "closeEmpty",
+          "role": "seller",
+          "hash": "7751d9c95c01880786496e5b6c4aed21bbbf9414b40f75c360520514b0628ac1",
+          "finalized": true,
+          "networkFeeCcd": "5.694519",
+          "blockHash": "0e74bcb40ec41efad0351b7804dc44f5d86727a9661a3e8eab61f5a101ec115b",
+          "before": {
+            "blockHash": "18dfa6277a14b9ef9530f9e51c65840693be6fc44de27164837fb3a59ee86c2c",
+            "blockHeight": "49839706",
+            "blockTime": "2026-10-23T06:41:41.469Z",
+            "accounts": {
+              "buyerA": {
+                "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "buyerB": {
+                "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "seller": {
+                "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+                "balanceMicro": "19424261816",
+                "balanceCcd": "19424.261816",
+                "availableMicro": "19424261816",
+                "nonce": "8"
+              },
+              "platform": {
+                "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "balanceMicro": "0",
+                "balanceCcd": "0.000000",
+                "availableMicro": "0",
+                "nonce": "1"
+              }
+            },
+            "contractBalanceMicro": "0",
+            "state": {
+              "allocations": [],
+              "bids": [],
+              "buyer_fee": "200000",
+              "phase": {
+                "Open": []
+              },
+              "rules": {
+                "capacity": "1",
+                "deadline": "2026-10-23T06:34:01.469+00:00",
+                "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "max_bids": "2",
+                "reserve": "2000000",
+                "service_id": "testnet-auction-20261023"
+              },
+              "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "seller_fee": "200000",
+              "total_deposited": "0"
+            }
+          },
+          "after": {
+            "blockHash": "0e74bcb40ec41efad0351b7804dc44f5d86727a9661a3e8eab61f5a101ec115b",
+            "blockHeight": "49839712",
+            "blockTime": "2026-10-23T06:41:53.469Z",
+            "accounts": {
+              "buyerA": {
+                "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "buyerB": {
+                "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+                "balanceMicro": "20000000000",
+                "balanceCcd": "20000.000000",
+                "availableMicro": "20000000000",
+                "nonce": "1"
+              },
+              "seller": {
+                "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+                "balanceMicro": "19418567297",
+                "balanceCcd": "19418.567297",
+                "availableMicro": "19418567297",
+                "nonce": "9"
+              },
+              "platform": {
+                "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "balanceMicro": "0",
+                "balanceCcd": "0.000000",
+                "availableMicro": "0",
+                "nonce": "1"
+              }
+            },
+            "contractBalanceMicro": "0",
+            "state": {
+              "allocations": [],
+              "bids": [],
+              "buyer_fee": "200000",
+              "phase": {
+                "NoSale": []
+              },
+              "rules": {
+                "capacity": "1",
+                "deadline": "2026-10-23T06:34:01.469+00:00",
+                "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+                "max_bids": "2",
+                "reserve": "2000000",
+                "service_id": "testnet-auction-20261023"
+              },
+              "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "seller_fee": "200000",
+              "total_deposited": "0"
+            }
+          }
+        }
+      ],
+      "reason": "Expired empty round after read-only RPC preflight failed"
+    }
+  ],
+  "unsubmittedRequests": [
+    {
+      "request": {
+        "step": "init",
+        "role": "seller",
+        "before": {
+          "blockHash": "cac8503a0db2e89b4c67a1c1be1c481c7a00ed1e77b4d6b0913f15679b7a6d62",
+          "blockHeight": "49839782",
+          "blockTime": "2026-10-23T06:44:13.469Z",
+          "accounts": {
+            "buyerA": {
+              "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "balanceMicro": "20000000000",
+              "balanceCcd": "20000.000000",
+              "availableMicro": "20000000000",
+              "nonce": "1"
+            },
+            "buyerB": {
+              "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+              "balanceMicro": "20000000000",
+              "balanceCcd": "20000.000000",
+              "availableMicro": "20000000000",
+              "nonce": "1"
+            },
+            "seller": {
+              "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "balanceMicro": "19418567297",
+              "balanceCcd": "19418.567297",
+              "availableMicro": "19418567297",
+              "nonce": "9"
+            },
+            "platform": {
+              "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+              "balanceMicro": "0",
+              "balanceCcd": "0.000000",
+              "availableMicro": "0",
+              "nonce": "1"
+            }
+          }
+        },
+        "requestedAt": "2026-10-23T06:44:17.303Z"
+      },
+      "params": {
+        "service_id": "testnet-auction-20261023",
+        "reserve": "2000000",
+        "capacity": 1,
+        "max_bids": 2,
+        "deadline": "2026-10-23T06:49:13.469Z",
+        "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4"
+      },
+      "resolution": {
+        "status": "No transaction observed",
+        "walletLatestHash": "7751d9c95c01880786496e5b6c4aed21bbbf9414b40f75c360520514b0628ac1",
+        "preflight": {
+          "success": true,
+          "network": "Concordium Testnet",
+          "genesis": "4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796",
+          "blockHash": "a13cb1cc05233e6a862c904d91740d35c72d6924221a50c89706dec3d7dbcd5f",
+          "accounts": [
+            {
+              "role": "buyerA",
+              "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "balanceCcd": "20000.000000",
+              "availableCcd": "20000.000000",
+              "nonce": "1"
+            },
+            {
+              "role": "buyerB",
+              "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+              "balanceCcd": "20000.000000",
+              "availableCcd": "20000.000000",
+              "nonce": "1"
+            },
+            {
+              "role": "seller",
+              "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "balanceCcd": "19418.567297",
+              "availableCcd": "19418.567297",
+              "nonce": "9"
+            },
+            {
+              "role": "platform",
+              "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+              "balanceCcd": "0.000000",
+              "availableCcd": "0.000000",
+              "nonce": "1"
+            }
+          ],
+          "rpcRequests": 9,
+          "transactionSent": false,
+          "timeUtc": "2026-10-23T06:53:30.019Z"
+        },
+        "note": "User supplied latest wallet activity hash; node has all transactions finalized and unchanged nonce. Original request failed before a hash was returned. Preserve evidence and prepare fresh deadline."
+      }
+    },
+    {
+      "request": {
+        "step": "init",
+        "role": "seller",
+        "before": {
+          "blockHash": "19d7f1b1e96a547c9c31221da33e0f64d8360d7b240f28ad4d9da852fed0dff0",
+          "blockHeight": "49840115",
+          "blockTime": "2026-10-23T06:55:19.469Z",
+          "accounts": {
+            "buyerA": {
+              "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "balanceMicro": "20000000000",
+              "balanceCcd": "20000.000000",
+              "availableMicro": "20000000000",
+              "nonce": "1"
+            },
+            "buyerB": {
+              "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+              "balanceMicro": "20000000000",
+              "balanceCcd": "20000.000000",
+              "availableMicro": "20000000000",
+              "nonce": "1"
+            },
+            "seller": {
+              "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "balanceMicro": "19418567297",
+              "balanceCcd": "19418.567297",
+              "availableMicro": "19418567297",
+              "nonce": "9"
+            },
+            "platform": {
+              "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+              "balanceMicro": "0",
+              "balanceCcd": "0.000000",
+              "availableMicro": "0",
+              "nonce": "1"
+            }
+          }
+        },
+        "requestedAt": "2026-10-23T06:55:23.772Z"
+      },
+      "params": {
+        "service_id": "testnet-auction-20261023",
+        "reserve": "2000000",
+        "capacity": 1,
+        "max_bids": 2,
+        "deadline": "2026-10-23T07:00:19.469Z",
+        "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4"
+      },
+      "resolution": {
+        "status": "Wallet request timed out without hash",
+        "preflight": {
+          "success": true,
+          "network": "Concordium Testnet",
+          "genesis": "4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796",
+          "blockHash": "de972ef19db430cc079afc16033b3bf331c60a9952c445dbbb6abd1d9327c542",
+          "accounts": [
+            {
+              "role": "buyerA",
+              "address": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+              "balanceCcd": "20000.000000",
+              "availableCcd": "20000.000000",
+              "nonce": "1"
+            },
+            {
+              "role": "buyerB",
+              "address": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+              "balanceCcd": "20000.000000",
+              "availableCcd": "20000.000000",
+              "nonce": "1"
+            },
+            {
+              "role": "seller",
+              "address": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+              "balanceCcd": "19418.567297",
+              "availableCcd": "19418.567297",
+              "nonce": "9"
+            },
+            {
+              "role": "platform",
+              "address": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+              "balanceCcd": "0.000000",
+              "availableCcd": "0.000000",
+              "nonce": "1"
+            }
+          ],
+          "rpcRequests": 9,
+          "transactionSent": false,
+          "timeUtc": "2026-10-23T07:06:41.180Z"
+        },
+        "note": "User reported no popup, closed wallet windows and any stale requests before reconnect; no new transaction observed, allFinal checked."
+      }
+    }
+  ],
+  "params": {
+    "service_id": "testnet-auction-20261023",
+    "reserve": "2000000",
+    "capacity": 1,
+    "max_bids": 2,
+    "deadline": "2026-10-23T07:14:15.469Z",
+    "fee_recipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4"
+  },
+  "address": {
+    "index": "13005",
+    "subindex": "0"
+  },
+  "repeatFinalize": {
+    "rejected": true,
+    "error": {
+      "Closed": []
+    },
+    "reason": {
+      "tag": "RejectedReceive",
+      "contractAddress": {
+        "index": "13005",
+        "subindex": "0",
+        "__type": "ccd_contract_address"
+      },
+      "receiveName": "auction_spike.finalize",
+      "rejectReason": -10,
+      "parameter": ""
+    },
+    "blockHash": "51134a98f4ada99347f2e1b3faa11908ba236149a0c97dd7a1eb570936db1dad",
+    "transactionSent": false,
+    "method": "read-only invokeContract"
+  }
+}
