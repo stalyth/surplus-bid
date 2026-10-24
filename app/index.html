@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="SurplusBid walking skeleton for an Agent-to-Agent auction on Concordium Testnet."
+    />
+    <title>SurplusBid · Walking Skeleton</title>
+    <link rel="stylesheet" href="/app/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="SurplusBid 首页">
+        <span class="brand-mark">S</span>
+        <span>SurplusBid</span>
+      </a>
+      <div class="header-badges" aria-label="环境状态">
+        <span class="badge badge-neutral">Concordium Testnet</span>
+        <span class="badge badge-warning">Walking skeleton</span>
+        <button class="badge wallet-button" id="wallet-button" type="button">连接钱包</button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <p class="eyebrow">Agent-to-Agent sealed auction · W2D2</p>
+        <h1>让有限服务的交易剩余<br />按公开规则分配。</h1>
+        <p class="hero-copy">
+          两个固定规则 Buyer Agent 竞争一份 Priority AI Analysis。当前页面已可连接 Concordium Wallet 并核验 Testnet；拍卖动作仍是本地流程预览。
+        </p>
+        <div class="truth-banner" role="note">
+          <strong>演示边界</strong>
+          <span>连接钱包不会发送交易；页面操作仍是 commit-reveal 流程预览。核心合约已通过本地 Wasm 测试，真实新规则 Testnet 调用仍待验证。</span>
+        </div>
+      </section>
+
+      <section class="flow-shell" aria-labelledby="flow-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">One connected path</p>
+            <h2 id="flow-title">一条主流程走到底</h2>
+          </div>
+          <button class="button button-ghost" id="reset-button" type="button">重置演示</button>
+        </div>
+
+        <ol class="progress" aria-label="演示进度">
+          <li data-progress="create"><span>01</span>固定规则</li>
+          <li data-progress="bid"><span>02</span>提交承诺</li>
+          <li data-progress="settle"><span>03</span>揭示与结算</li>
+          <li data-progress="evidence"><span>04</span>公开证据</li>
+        </ol>
+
+        <div class="workflow-grid">
+          <article class="panel rules-panel">
+            <div class="panel-kicker"><span>01</span> 报价前固定</div>
+            <div class="panel-title-row">
+              <div>
+                <h3>Priority AI Analysis</h3>
+                <p>卖家当前窗口只可交付一份高优先级分析。</p>
+              </div>
+              <span class="status-pill" id="auction-phase">Draft</span>
+            </div>
+
+            <dl class="rule-grid">
+              <div><dt>底价</dt><dd>承诺期隐藏</dd></div>
+              <div><dt>容量</dt><dd>1</dd></div>
+              <div><dt>阶段</dt><dd>5 + 2 + 2 分钟</dd></div>
+              <div><dt>最多报价</dt><dd>2</dd></div>
+            </dl>
+
+            <div class="formula-card">
+              <span>当前演示定价</span>
+              <code>price = reserve + floor(surplus / 2)</code>
+              <span>平台费：交易剩余的 10%，买卖双方均摊；低于成交价 10% 时免收</span>
+            </div>
+
+            <div class="meta-list">
+              <div><span>钱包状态</span><strong id="wallet-status">未连接</strong></div>
+              <div><span>Auction ID</span><strong id="auction-id">创建后生成</strong></div>
+              <div><span>承诺截止（本机）</span><strong id="auction-deadline">创建后生成</strong></div>
+            </div>
+
+            <button class="button button-primary" id="create-button" type="button">运行 Seller Agent 并创建</button>
+            <p class="todo">已接入钱包连接与 Testnet 核验；本地合约入口：<code>init → start_round</code>；真实交易待接入</p>
+
+            <div class="testnet-check" aria-labelledby="testnet-check-title">
+              <div class="panel-kicker"><span>链</span> Testnet 最小验证</div>
+              <h4 id="testnet-check-title">部署 → 0 CCD 创建 → view</h4>
+              <p>部署当前 <code>surplus_bid</code> Wasm，再创建空实例并读回状态。两笔交易只消耗 Testnet 网络费，不锁定保证金。</p>
+              <div class="action-row">
+                <button class="button button-secondary" id="deploy-module-button" type="button" disabled>1. 部署模块</button>
+                <button class="button button-secondary" id="init-contract-button" type="button" disabled>2. 创建 0 CCD 实例</button>
+                <button class="button button-ghost" id="read-view-button" type="button" disabled>3. 读回 view</button>
+              </div>
+              <div class="testnet-status" id="testnet-status" aria-live="polite">先连接 Testnet 钱包，再验证公共节点和当前构建。</div>
+            </div>
+          </article>
+
+          <article class="panel bids-panel">
+            <div class="panel-kicker"><span>02</span> 固定规则 Agent</div>
+            <h3>两个 Agent，两份密封承诺</h3>
+            <p class="panel-copy">承诺期只公开哈希和顺序，每位买家先存入 2 CCD 保证金；揭示后补足至完整报价。</p>
+
+            <div class="agent-list">
+              <div class="agent-card" data-agent-card="buyer-a">
+                <div class="agent-identity">
+                  <span class="agent-avatar">A</span>
+                  <div><strong>Buyer Agent A</strong><span>固定演示报价 4 CCD</span></div>
+                </div>
+                <button class="button button-secondary" data-bid-agent="buyer-a" type="button" disabled>提交承诺 + 2 CCD</button>
+              </div>
+              <div class="agent-card" data-agent-card="buyer-b">
+                <div class="agent-identity">
+                  <span class="agent-avatar accent">B</span>
+                  <div><strong>Buyer Agent B</strong><span>固定演示报价 6 CCD</span></div>
+                </div>
+                <button class="button button-secondary" data-bid-agent="buyer-b" type="button" disabled>提交承诺 + 2 CCD</button>
+              </div>
+            </div>
+
+            <div class="deposit-bar">
+              <div><span>预览中的合约托管</span><strong id="contract-deposit">0 CCD</strong></div>
+              <div class="bar-track"><span id="deposit-fill"></span></div>
+              <small>承诺后 6 CCD；全部揭示补足后 12 CCD（含卖家 2 CCD 保证金）· demo data</small>
+            </div>
+            <p class="todo">SHA-256 绑定合约、轮次、账户、金额和 32 字节盐；此页面只预览状态</p>
+          </article>
+
+          <article class="panel settlement-panel">
+            <div class="panel-kicker"><span>03</span> 截止后触发</div>
+            <div class="panel-title-row">
+              <div><h3>确定性结算</h3><p>触发者只启动已固定的规则，不能选择赢家或修改分账。</p></div>
+              <span class="status-pill" id="deadline-status">未到期</span>
+            </div>
+
+            <div class="action-row">
+              <button class="button button-ghost" id="early-finalize-button" type="button" disabled>尝试提前结算</button>
+              <button class="button button-secondary" id="deadline-button" type="button" disabled>推进阶段并揭示</button>
+              <button class="button button-primary" id="finalize-button" type="button" disabled>执行结算</button>
+            </div>
+
+            <div class="inline-message" id="inline-message" aria-live="polite">先创建拍卖并提交两份报价承诺。</div>
+            <p class="todo">卖家先揭示底价，买家随后揭示报价；真实边界由合约链上时间执行。</p>
+
+            <div class="result-shell" id="result-shell" hidden>
+              <div class="winner-row">
+                <span class="winner-mark" id="winner-mark">—</span>
+                <div><span>Winner</span><strong id="winner-name">—</strong></div>
+                <strong id="winner-price">—</strong>
+              </div>
+              <div class="surplus-line">
+                <span id="result-reserve">—</span><span class="line-fill"></span><strong id="result-surplus">—</strong><span class="line-fill"></span><span id="result-bid">—</span>
+              </div>
+              <dl class="money-grid">
+                <div><dt>A 全额退款</dt><dd id="buyer-a-refund">4 CCD</dd></div>
+                <div><dt>B 差额退款</dt><dd id="buyer-b-refund">1.8 CCD</dd></div>
+                <div><dt>卖家实收</dt><dd id="seller-receives">3.8 CCD</dd></div>
+                <div><dt>平台费用</dt><dd id="platform-receives">0.4 CCD</dd></div>
+              </dl>
+              <div class="conservation"><span>资金守恒</span><code id="conservation">—</code></div>
+            </div>
+            <p class="todo">本地 Wasm 已验证 <code>finalize</code> 资金守恒与重复结算拒绝；Testnet 待验证</p>
+          </article>
+
+          <article class="panel evidence-panel">
+            <div class="panel-kicker"><span>04</span> 可独立核验</div>
+            <div class="panel-title-row">
+              <div><h3>Testnet 历史证据</h3><p>仓库历史快照，非实时查询；真实交易只证明旧固定费用 spike 的资金路径。</p></div>
+              <span class="badge badge-danger">旧规则</span>
+            </div>
+            <div class="evidence-summary" id="evidence-summary">正在读取仓库中的 Testnet 证据…</div>
+            <div class="evidence-list" id="evidence-list"></div>
+            <p class="todo">TODO：填入同一 round 的密封双买家 + 10% 费用 Testnet 证据</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="activity" aria-labelledby="activity-title">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Execution log</p><h2 id="activity-title">骨架执行记录</h2></div>
+          <span class="badge badge-neutral">仅当前浏览器会话</span>
+        </div>
+        <ol id="activity-log" class="activity-log">
+          <li><time>等待</time><span>创建演示拍卖后，步骤会在这里串起来。</span><em>placeholder</em></li>
+        </ol>
+      </section>
+    </main>
+
+    <footer>
+      <span>SurplusBid · Concordium Testnet prototype</span>
+      <span>承诺期隐藏、揭示后公开 · 测试 CCD · 未经安全审计</span>
+    </footer>
+
+    <script src="/vendor/concordium.web.min.js"></script>
+    <script type="module" src="/app/app.mjs"></script>
+  </body>
+</html>

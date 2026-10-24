@@ -15,8 +15,8 @@ if ! command -v cargo >/dev/null 2>&1 || ! command -v cargo-concordium >/dev/nul
 fi
 
 export CARGO_HTTP_TIMEOUT=30
-export CARGO_TARGET_DIR="$repo_dir/contracts/auction-spike/target"
+export CARGO_TARGET_DIR="$repo_dir/contracts/sealed-auction/target"
 
-cd "$repo_dir/contracts/auction-spike"
+cd "$repo_dir/contracts/sealed-auction"
 cargo concordium build --out module.wasm.v1 --schema-out schema.bin -- --locked
 cargo test --locked
