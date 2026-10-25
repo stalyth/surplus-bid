@@ -28,11 +28,11 @@
         <p class="eyebrow">Agent-to-Agent sealed auction · W2D2</p>
         <h1>让有限服务的交易剩余<br />按公开规则分配。</h1>
         <p class="hero-copy">
-          两个固定规则 Buyer Agent 竞争一份 Priority AI Analysis。当前页面已可连接 Concordium Wallet 并核验 Testnet；拍卖动作仍是本地流程预览。
+          两个固定规则 Buyer Agent 竞争一份 Priority AI Analysis。页面可通过 Concordium Wallet 发送 Testnet 合约交易，并在最终确认后读回同一实例的 <code>view</code>；本地流程预览仅用于解释规则。
         </p>
         <div class="truth-banner" role="note">
-          <strong>演示边界</strong>
-          <span>连接钱包不会发送交易；页面操作仍是 commit-reveal 流程预览。核心合约已通过本地 Wasm 测试，真实新规则 Testnet 调用仍待验证。</span>
+          <strong>已完成的 Testnet 证据</strong>
+          <span><a href="https://ccdexplorer.io/testnet/contract/13010/0" target="_blank" rel="noreferrer">&lt;13010,0&gt;</a> 已完成两笔承诺、卖家揭示、A 揭示与结算，最终余额为 0 CCD。B 未揭示，故这不是两份已揭示报价竞争的证据；本地流程预览仍单独标为 demo data。</span>
         </div>
       </section>
 
@@ -66,7 +66,7 @@
             <dl class="rule-grid">
               <div><dt>底价</dt><dd>承诺期隐藏</dd></div>
               <div><dt>容量</dt><dd>1</dd></div>
-              <div><dt>阶段</dt><dd>5 + 2 + 2 分钟</dd></div>
+              <div><dt>阶段</dt><dd>20 + 5 + 5 分钟</dd></div>
               <div><dt>最多报价</dt><dd>2</dd></div>
             </dl>
 
@@ -83,18 +83,29 @@
             </div>
 
             <button class="button button-primary" id="create-button" type="button">运行 Seller Agent 并创建</button>
-            <p class="todo">已接入钱包连接与 Testnet 核验；本地合约入口：<code>init → start_round</code>；真实交易待接入</p>
+            <p class="todo">真实链上操作使用固定演示值：底价 2 CCD，买家 A 报价 4 CCD，买家 B 报价 6 CCD；每笔钱包交易都需用户自行确认</p>
 
             <div class="testnet-check" aria-labelledby="testnet-check-title">
               <div class="panel-kicker"><span>链</span> Testnet 最小验证</div>
-              <h4 id="testnet-check-title">部署 → 0 CCD 创建 → view</h4>
-              <p>部署当前 <code>surplus_bid</code> Wasm，再创建空实例并读回状态。两笔交易只消耗 Testnet 网络费，不锁定保证金。</p>
+              <h4 id="testnet-check-title">部署 → 创建 → 承诺 → 揭示 → 结算</h4>
+              <p>真实按钮按链上阶段调用当前 <code>surplus_bid</code> 合约。已完成的 <code>&lt;13010,0&gt;</code> 证明 2 CCD 卖家保证金、两笔承诺、卖家揭示、A 揭示和结算；盐只保存在当前浏览器，之后才请求钱包签名。</p>
               <div class="action-row">
                 <button class="button button-secondary" id="deploy-module-button" type="button" disabled>1. 部署模块</button>
                 <button class="button button-secondary" id="init-contract-button" type="button" disabled>2. 创建 0 CCD 实例</button>
                 <button class="button button-ghost" id="read-view-button" type="button" disabled>3. 读回 view</button>
+                <button class="button button-primary" id="start-round-button" type="button" disabled>4. 开始轮次 + 2 CCD</button>
+                <button class="button button-ghost" id="backup-reserve-button" type="button" disabled>下载底价揭示备份</button>
+                <button class="button button-ghost" id="cancel-round-button" type="button" disabled>过期后可取消并退款</button>
               </div>
               <div class="testnet-status" id="testnet-status" aria-live="polite">先连接 Testnet 钱包，再验证公共节点和当前构建。</div>
+              <div class="action-row" aria-label="真实 Testnet 后续操作">
+                <button class="button button-secondary" id="commit-bid-a-button" type="button" disabled>买家 A：承诺 4 CCD + 2 CCD</button>
+                <button class="button button-secondary" id="commit-bid-b-button" type="button" disabled>买家 B：承诺 6 CCD + 2 CCD</button>
+                <button class="button button-secondary" id="reveal-reserve-button" type="button" disabled>卖家揭示底价</button>
+                <button class="button button-secondary" id="reveal-bid-button" type="button" disabled>当前买家揭示报价</button>
+                <button class="button button-primary" id="finalize-chain-button" type="button" disabled>链上结算</button>
+              </div>
+              <p class="todo">真实操作按链上阶段开放。请在钱包扩展切换账户后点击“连接钱包”重新读取当前账户；买家承诺盐和卖家底价盐仅保存在当前浏览器。</p>
             </div>
           </article>
 
@@ -161,18 +172,18 @@
               </dl>
               <div class="conservation"><span>资金守恒</span><code id="conservation">—</code></div>
             </div>
-            <p class="todo">本地 Wasm 已验证 <code>finalize</code> 资金守恒与重复结算拒绝；Testnet 待验证</p>
+            <p class="todo">本地 demo data 预览 B 以 6 CCD 中标的目标场景。真实 <code>&lt;13010,0&gt;</code> 则由 A 以 4 CCD 成交，B 未揭示；该事实以链上证据为准。</p>
           </article>
 
           <article class="panel evidence-panel">
             <div class="panel-kicker"><span>04</span> 可独立核验</div>
             <div class="panel-title-row">
-              <div><h3>Testnet 历史证据</h3><p>仓库历史快照，非实时查询；真实交易只证明旧固定费用 spike 的资金路径。</p></div>
-              <span class="badge badge-danger">旧规则</span>
+              <div><h3>Testnet 证据</h3><p>当前主证据为 <a href="https://ccdexplorer.io/testnet/contract/13010/0" target="_blank" rel="noreferrer">&lt;13010,0&gt;</a>；下方列表保留旧 fixed-fee spike 的历史快照。</p></div>
+              <span class="badge badge-success">当前证据已记录</span>
             </div>
             <div class="evidence-summary" id="evidence-summary">正在读取仓库中的 Testnet 证据…</div>
             <div class="evidence-list" id="evidence-list"></div>
-            <p class="todo">TODO：填入同一 round 的密封双买家 + 10% 费用 Testnet 证据</p>
+            <p class="todo">当前 round：A/B 承诺、卖家/A 揭示、结算均已上链；B 未揭示。完整交易与资金对账在父仓库 <code>docs/evidence/sealed-auction-testnet.json</code>。</p>
           </article>
         </div>
       </section>

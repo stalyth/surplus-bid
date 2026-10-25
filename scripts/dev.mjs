@@ -49,7 +49,7 @@ const mimeTypes = new Map([
   ['.bin', 'application/octet-stream'],
 ])
 
-const verified = { deployment: null, initialization: null }
+const verified = loadRecordedVerification()
 
 const server = createServer(async (request, response) => {
   try {
@@ -119,6 +119,8 @@ async function handleTestnetApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/testnet/status') {
     const artifact = loadArtifacts()
     const consensus = await getTestnetConsensus()
+    const view = verified.initialization ? await readInitializedState() : null
+    if (view) restoreObservedRound(view)
     sendJson(response, 200, {
       ok: true,
       network: 'Concordium Testnet',
@@ -128,6 +130,8 @@ async function handleTestnetApi(request, response, url) {
       lastFinalizedBlock: String(consensus.lastFinalizedBlock),
       deployment: verified.deployment,
       initialization: verified.initialization,
+      round: verified.round,
+      view,
     })
     return
   }
@@ -137,6 +141,18 @@ async function handleTestnetApi(request, response, url) {
   }
   if (request.method === 'POST' && url.pathname === '/api/testnet/verify-init') {
     sendJson(response, 200, { ok: true, ...await verifyInitialization(await readJson(request)) })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/testnet/verify-start-round') {
+    sendJson(response, 200, { ok: true, ...await verifyStartRound(await readJson(request)) })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/testnet/verify-cancel-round') {
+    sendJson(response, 200, { ok: true, ...await verifyCancelRound(await readJson(request)) })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/testnet/verify-update') {
+    sendJson(response, 200, { ok: true, ...await verifyContractUpdate(await readJson(request)) })
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/testnet/view') {
@@ -152,6 +168,17 @@ async function verifyDeployment({ hash, sender }) {
   const outcome = await finalizedOutcome(hash)
   if (!outcome) return { final: false }
   const summary = outcome.summary
+  if (summary.transactionType === 'failed') {
+    const view = await readInitializedState()
+    restoreObservedRound(view)
+    const phase = variantName(view.state.phase)
+    const code = summary.rejectReason?.rejectReason
+    const reason = contractRejectName(code)
+    if (phase === 'Commit') {
+      throw new Error(`该 start_round 交易被合约拒绝（${reason}）：当前实例已经处于 Commit，未再次锁定 2 CCD。`)
+    }
+    throw new Error(`start_round 被合约拒绝（${reason}），未锁定保证金。`)
+  }
   if (summary.type !== 'accountTransaction' || AccountAddress.toBase58(summary.sender) !== AccountAddress.toBase58(senderAddress)) {
     throw new Error('最终交易的签名账户与页面连接账户不一致。')
   }
@@ -200,6 +227,184 @@ async function verifyInitialization({ hash, sender }) {
   return { final: true, initialization: verified.initialization, view: await readInitializedState() }
 }
 
+async function verifyStartRound({ hash, sender, plan }) {
+  if (!verified.initialization) throw new Error('没有已核验的 surplus_bid 实例。')
+  const senderAddress = parseAccount(sender)
+  const expectedSeller = parseAccount(verified.initialization.sender)
+  if (AccountAddress.toBase58(senderAddress) !== AccountAddress.toBase58(expectedSeller)) {
+    throw new Error('只有当前实例的初始化签名账户可以开始本轮。')
+  }
+  const expected = validatePublicRoundPlan(plan, verified.initialization)
+  const outcome = await finalizedOutcome(hash)
+  if (!outcome) return { final: false }
+  const summary = outcome.summary
+  if (summary.type !== 'accountTransaction' || AccountAddress.toBase58(summary.sender) !== AccountAddress.toBase58(senderAddress)) {
+    throw new Error('最终交易的签名账户与页面连接账户不一致。')
+  }
+  if (summary.transactionType !== 'update') throw new Error('最终交易不是合约更新。')
+  const update = summary.events?.find((event) => event.tag === 'Updated')
+  if (
+    !update ||
+    String(update.address?.index) !== verified.initialization.address.index ||
+    String(update.address?.subindex) !== verified.initialization.address.subindex ||
+    String(update.receiveName) !== 'surplus_bid.start_round' ||
+    CcdAmount.toMicroCcd(update.amount).toFixed(0) !== '2000000'
+  ) {
+    throw new Error('最终交易不是向当前实例支付 2 CCD 的 surplus_bid.start_round 调用。')
+  }
+  const view = await readInitializedState()
+  if (variantName(view.state.phase) !== 'Commit') throw new Error('链上 view 未进入 Commit 阶段。')
+  if (String(view.state.total_deposited) !== '2000000' || view.contractBalanceMicroCcd !== '2000000') {
+    throw new Error('链上合约余额与 2 CCD 卖家保证金不一致。')
+  }
+  const actualRound = optionValue(view.state.round)
+  if (!actualRound) throw new Error('链上 view 未记录本轮参数。')
+  if (
+    normalizeTimestamp(actualRound.commit_end) !== expected.commitEnd ||
+    normalizeTimestamp(actualRound.seller_reveal_end) !== expected.sellerRevealEnd ||
+    normalizeTimestamp(actualRound.buyer_reveal_end) !== expected.buyerRevealEnd ||
+    Number(actualRound.max_bids) !== expected.maxBids ||
+    !equalNumberArrays(actualRound.reserve_commitment, expected.reserveCommitment)
+  ) {
+    throw new Error('链上记录的本轮参数与钱包提交参数不一致。')
+  }
+  verified.round = {
+    hash,
+    roundId: '1',
+    commitEnd: expected.commitEnd,
+    sellerRevealEnd: expected.sellerRevealEnd,
+    buyerRevealEnd: expected.buyerRevealEnd,
+    maxBids: expected.maxBids,
+    reserveCommitment: expected.reserveCommitment,
+    blockHash: String(outcome.blockHash),
+    explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
+  }
+  return { final: true, round: verified.round, view }
+}
+
+async function verifyCancelRound({ hash, sender }) {
+  if (!verified.initialization) throw new Error('没有已核验的 surplus_bid 实例。')
+  const senderAddress = parseAccount(sender)
+  const outcome = await finalizedOutcome(hash)
+  if (!outcome) return { final: false }
+  const summary = outcome.summary
+  if (summary.transactionType === 'failed') {
+    throw new Error(`cancel 被合约拒绝（${contractRejectName(summary.rejectReason?.rejectReason)}），未发送退款。`)
+  }
+  if (summary.type !== 'accountTransaction' || AccountAddress.toBase58(summary.sender) !== AccountAddress.toBase58(senderAddress)) {
+    throw new Error('最终交易的签名账户与页面连接账户不一致。')
+  }
+  const update = summary.events?.find((event) => event.tag === 'Updated')
+  if (
+    summary.transactionType !== 'update' || !update ||
+    String(update.address?.index) !== verified.initialization.address.index ||
+    String(update.address?.subindex) !== verified.initialization.address.subindex ||
+    String(update.receiveName) !== 'surplus_bid.cancel' ||
+    CcdAmount.toMicroCcd(update.amount).toFixed(0) !== '0'
+  ) throw new Error('最终交易不是当前实例的 0 CCD surplus_bid.cancel 调用。')
+  const view = await readInitializedState()
+  if (variantName(view.state.phase) !== 'NoSale' || view.contractBalanceMicroCcd !== '0') {
+    throw new Error('cancel 后链上状态或余额不符合空轮次退款规则。')
+  }
+  restoreObservedRound(view)
+  verified.round = {
+    ...verified.round,
+    hash,
+    phase: 'NoSale',
+    explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
+  }
+  return { final: true, round: verified.round, view }
+}
+
+async function verifyContractUpdate({ hash, sender, receiveName, amountMicroCcd, expected = {} }) {
+  if (!verified.initialization) throw new Error('没有已核验的 surplus_bid 实例。')
+  if (typeof receiveName !== 'string' || !receiveName.startsWith('surplus_bid.')) throw new Error('合约入口无效。')
+  if (!/^\d+$/.test(String(amountMicroCcd))) throw new Error('调用金额无效。')
+  const senderAddress = parseAccount(sender)
+  const outcome = await finalizedOutcome(hash)
+  if (!outcome) return { final: false }
+  const summary = outcome.summary
+  if (summary.transactionType === 'failed') throw new Error(`${receiveName} 被合约拒绝（${contractRejectName(summary.rejectReason?.rejectReason)}），未发生业务转账。`)
+  const update = summary.events?.find((event) => event.tag === 'Updated')
+  if (
+    summary.type !== 'accountTransaction' ||
+    AccountAddress.toBase58(summary.sender) !== AccountAddress.toBase58(senderAddress) ||
+    summary.transactionType !== 'update' || !update ||
+    String(update.address?.index) !== verified.initialization.address.index ||
+    String(update.address?.subindex) !== verified.initialization.address.subindex ||
+    String(update.receiveName) !== receiveName ||
+    CcdAmount.toMicroCcd(update.amount).toFixed(0) !== String(amountMicroCcd)
+  ) throw new Error('最终交易与页面请求的合约入口、实例或金额不一致。')
+  const view = await readInitializedState()
+  verifyUpdateState(receiveName, view, sender, expected)
+  restoreObservedRound(view)
+  return {
+    final: true,
+    view,
+    round: verified.round,
+    explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
+    transactionHash: hash,
+  }
+}
+
+function verifyUpdateState(receiveName, view, sender, expected) {
+  const state = view.state
+  const round = optionValue(state.round)
+  if (!round) throw new Error('链上 view 没有当前 round；无法证明此更新属于同一轮。')
+  if (variantName(state.phase) === 'Idle') throw new Error('链上 view 意外回到 Idle；无法证明此更新属于当前 round。')
+  const bids = Array.isArray(state.bids) ? state.bids : []
+  const senderAddress = AccountAddress.toBase58(parseAccount(sender))
+
+  if (receiveName === 'surplus_bid.commit_bid') {
+    if (variantName(state.phase) !== 'Commit') throw new Error('commit_bid 后链上 view 未保持 Commit 阶段。')
+    const bid = bids.find((item) => sameAccountAddress(item.bidder, senderAddress))
+    if (!bid) throw new Error('commit_bid 后链上 view 未记录当前买家。')
+    if (!sameAccountAddress(expected.bidder, senderAddress)) throw new Error('页面承诺中的买家与交易签名账户不一致。')
+    if (!equalNumberArrays(bid.commitment, expected.commitment)) throw new Error('链上承诺哈希与页面提交值不一致。')
+    if (String(bid.escrow) !== '2000000' || optionValue(bid.revealed_bid) !== null) {
+      throw new Error('commit_bid 后链上保证金或揭示状态不符合规则。')
+    }
+    if (String(state.total_deposited) !== String(2_000_000 * (bids.length + 1))) {
+      throw new Error('commit_bid 后链上托管总额与卖家及买家保证金不一致。')
+    }
+    return
+  }
+
+  if (receiveName === 'surplus_bid.reveal_reserve') {
+    if (variantName(state.phase) !== 'ReserveRevealed') throw new Error('reveal_reserve 后链上 view 未进入 ReserveRevealed。')
+    if (String(optionValue(state.reserve)) !== String(expected.reserveMicroCcd)) {
+      throw new Error('链上揭示的底价与页面承诺值不一致。')
+    }
+    return
+  }
+
+  if (receiveName === 'surplus_bid.reveal_bid') {
+    if (variantName(state.phase) !== 'ReserveRevealed') throw new Error('reveal_bid 后链上 view 未保持 ReserveRevealed。')
+    const bid = bids.find((item) => sameAccountAddress(item.bidder, senderAddress))
+    if (!bid || !sameAccountAddress(expected.bidder, senderAddress)) {
+      throw new Error('reveal_bid 的签名账户与同一 round 的买家承诺不一致。')
+    }
+    if (String(optionValue(bid.revealed_bid)) !== String(expected.bidMicroCcd) || String(bid.escrow) !== String(expected.bidMicroCcd)) {
+      throw new Error('链上揭示报价或对应托管额与页面值不一致。')
+    }
+    return
+  }
+
+  if (receiveName === 'surplus_bid.finalize') {
+    if (expected.requireSettlement !== true) throw new Error('结算缺少页面的明确核验要求。')
+    if (variantName(state.phase) !== 'Settled' || view.contractBalanceMicroCcd !== '0') {
+      throw new Error('finalize 后链上未进入 Settled 或合约余额未归零。')
+    }
+    const allocations = Array.isArray(state.allocations) ? state.allocations : []
+    if (allocations.length !== bids.length || allocations.filter((item) => item.won === true).length !== 1) {
+      throw new Error('finalize 后链上赢家分配与同一 round 的报价记录不一致。')
+    }
+    return
+  }
+
+  throw new Error(`没有 ${receiveName} 的状态核验规则。`)
+}
+
 async function readInitializedState() {
   if (!verified.initialization) throw new Error('请先完成当前页面发起的 0 CCD 合约初始化。')
   const artifact = loadArtifacts()
@@ -222,7 +427,12 @@ async function readInitializedState() {
   const bytes = ReturnValue.toBuffer(invoked.returnValue)
   const schema = artifact.schema.buffer.slice(artifact.schema.byteOffset, artifact.schema.byteOffset + artifact.schema.byteLength)
   const state = deserializeReceiveReturnValue(bytes.slice().buffer, schema, contractName, EntrypointName.fromString('view'))
-  return { blockHash: String(blockHash), state, contractBalance: String(instance.amount) }
+  return {
+    blockHash: String(blockHash),
+    state,
+    contractBalance: String(instance.amount),
+    contractBalanceMicroCcd: CcdAmount.toMicroCcd(instance.amount).toFixed(0),
+  }
 }
 
 async function finalizedOutcome(hash) {
@@ -240,6 +450,135 @@ function loadArtifacts() {
   const module = readFileSync(resolve(repoRoot, 'contracts', 'sealed-auction', 'module.wasm.v1'))
   const schema = readFileSync(resolve(repoRoot, 'contracts', 'sealed-auction', 'schema.bin'))
   return { moduleReference: createHash('sha256').update(module).digest('hex'), schema }
+}
+
+function loadRecordedVerification() {
+  try {
+    const artifact = loadArtifacts()
+    const evidence = JSON.parse(readFileSync(resolve(repoRoot, '../docs/evidence/sealed-auction-testnet.json'), 'utf8'))
+    if (evidence.module?.reference !== artifact.moduleReference) throw new Error('记录的模块引用与当前 Wasm 不一致。')
+    const current = evidence.currentCoreRound
+    const address = current?.instance?.address ?? evidence.instance?.address
+    const initialization = current?.transactions?.initialization ?? evidence.instance?.initialization
+    const sender = current?.instance?.seller ?? evidence.instance?.viewAtInitializationBlock?.seller
+    const contractUrl = current?.instance?.contractUrl ?? evidence.instance?.contractUrl
+    if (!address || !initialization || typeof sender !== 'string') throw new Error('记录的实例信息不完整。')
+    parseAccount(sender)
+    return {
+      deployment: {
+        hash: evidence.module.deployment.hash,
+        moduleReference: artifact.moduleReference,
+        blockHash: evidence.module.deployment.blockHash,
+        explorerUrl: evidence.module.deployment.explorerUrl,
+      },
+      initialization: {
+        hash: initialization.hash,
+        sender,
+        address: { index: String(address.index), subindex: String(address.subindex) },
+        blockHash: initialization.blockHash ?? null,
+        explorerUrl: initialization.explorerUrl,
+        contractUrl,
+      },
+      round: null,
+    }
+  } catch (error) {
+    console.error(`Could not restore recorded Testnet instance: ${error instanceof Error ? error.message : String(error)}`)
+    return { deployment: null, initialization: null, round: null }
+  }
+}
+
+function validatePublicRoundPlan(plan, initialization) {
+  if (!plan || typeof plan !== 'object' || !plan.contract || !plan.parameters) {
+    throw new Error('缺少本轮公开参数。')
+  }
+  if (
+    String(plan.contract.index) !== initialization.address.index ||
+    String(plan.contract.subindex) !== initialization.address.subindex ||
+    plan.seller !== initialization.sender
+  ) {
+    throw new Error('本轮参数没有绑定到当前实例和卖家。')
+  }
+  const parameters = plan.parameters
+  const reserveCommitment = parameters.reserve_commitment
+  const commitEnd = normalizeTimestamp(parameters.commit_end)
+  const sellerRevealEnd = normalizeTimestamp(parameters.seller_reveal_end)
+  const buyerRevealEnd = normalizeTimestamp(parameters.buyer_reveal_end)
+  const maxBids = Number(parameters.max_bids)
+  if (!commitEnd || !sellerRevealEnd || !buyerRevealEnd) {
+    throw new Error('本轮截止时间格式无效。')
+  }
+  if (!(BigInt(commitEnd) < BigInt(sellerRevealEnd) && BigInt(sellerRevealEnd) < BigInt(buyerRevealEnd))) {
+    throw new Error('本轮截止时间顺序无效。')
+  }
+  if (maxBids < 1 || maxBids > 16 || !Number.isInteger(maxBids)) throw new Error('本轮最大报价数量无效。')
+  if (!Array.isArray(reserveCommitment) || reserveCommitment.length !== 32 || reserveCommitment.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
+    throw new Error('底价承诺必须是 32 字节。')
+  }
+  return { commitEnd, sellerRevealEnd, buyerRevealEnd, maxBids, reserveCommitment }
+}
+
+function restoreObservedRound(view) {
+  const actual = optionValue(view.state.round)
+  if (!actual) {
+    verified.round = null
+    return
+  }
+  verified.round = {
+    ...verified.round,
+    hash: verified.round?.hash ?? null,
+    roundId: '1',
+    phase: variantName(view.state.phase),
+    commitEnd: normalizeTimestamp(actual.commit_end),
+    sellerRevealEnd: normalizeTimestamp(actual.seller_reveal_end),
+    buyerRevealEnd: normalizeTimestamp(actual.buyer_reveal_end),
+    maxBids: Number(actual.max_bids),
+    reserveCommitment: Array.from(actual.reserve_commitment, Number),
+    explorerUrl: verified.round?.explorerUrl ?? verified.initialization.contractUrl,
+  }
+}
+
+function normalizeTimestamp(value) {
+  if (typeof value === 'bigint') return value.toString()
+  const text = String(value)
+  if (/^\d+$/.test(text)) return text
+  const milliseconds = Date.parse(text)
+  return Number.isFinite(milliseconds) ? String(milliseconds) : null
+}
+
+function contractRejectName(code) {
+  const names = new Map([
+    [-1, 'Parse'], [-2, 'InvalidRules'], [-3, 'OnlyAccount'], [-4, 'Unauthorized'],
+    [-5, 'WrongPhase'], [-6, 'WrongTime'], [-7, 'WrongDeposit'], [-8, 'SellerCannotBid'],
+    [-9, 'BidLimit'], [-10, 'DuplicateBid'], [-11, 'MissingCommitment'], [-12, 'AlreadyRevealed'],
+    [-13, 'CommitmentMismatch'], [-14, 'InvalidFeeRecipient'], [-15, 'Arithmetic'],
+    [-16, 'TransferFailed'], [-17, 'BalanceMismatch'],
+  ])
+  return names.get(Number(code)) ?? `合约拒绝码 ${String(code)}`
+}
+
+function variantName(value) {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object') return Object.keys(value)[0] ?? ''
+  return ''
+}
+
+function optionValue(value) {
+  if (!value || typeof value !== 'object' || variantName(value) !== 'Some') return null
+  const contents = value.Some
+  return Array.isArray(contents) ? contents[0] : contents
+}
+
+function equalNumberArrays(left, right) {
+  return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => Number(value) === Number(right[index]))
+}
+
+function sameAccountAddress(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false
+  try {
+    return AccountAddress.toBase58(parseAccount(left)) === AccountAddress.toBase58(parseAccount(right))
+  } catch {
+    return false
+  }
 }
 
 function parseAccount(value) {
