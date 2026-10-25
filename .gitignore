@@ -5,6 +5,7 @@
 node_modules/
 dist/
 coverage/
+logs/*.jsonl
 contracts/**/target/
 contracts/**/module.wasm.v1
 contracts/**/schema.bin

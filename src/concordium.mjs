@@ -169,7 +169,10 @@ export async function submitMarketInitialization(connection, moduleReference, { 
   return assertTransactionHash(hash)
 }
 
-export async function prepareStartRound(connection, initialization, { now = Date.now() } = {}) {
+export async function prepareStartRound(connection, initialization, {
+  now = Date.now(),
+  reserveMicroCcd = '2000000',
+} = {}) {
   const sdk = requireTransactionSdk()
   if (!initialization?.address || typeof initialization.sender !== 'string') {
     throw new ConcordiumClientError('INSTANCE_UNAVAILABLE', '当前实例信息不完整，无法创建轮次。')
@@ -184,6 +187,9 @@ export async function prepareStartRound(connection, initialization, { now = Date
   if (!Number.isSafeInteger(now) || now <= 0) {
     throw new ConcordiumClientError('INVALID_CLOCK', '本机时间无效，无法设置链上截止时间。')
   }
+  if (typeof reserveMicroCcd !== 'string' || !/^(0|[1-9][0-9]*)$/.test(reserveMicroCcd)) {
+    throw new ConcordiumClientError('INVALID_RESERVE', 'Seller Agent 的最终底价必须是非负整数 microCCD。')
+  }
 
   const reserveSalt = new Uint8Array(32)
   crypto.getRandomValues(reserveSalt)
@@ -195,13 +201,14 @@ export async function prepareStartRound(connection, initialization, { now = Date
     domain: 'SURPLUS_BID_RESERVE_V1',
     contract: initialization.address,
     account,
-    amountMicroCcd: 2_000_000n,
+    amountMicroCcd: BigInt(reserveMicroCcd),
     salt: reserveSalt,
   })
 
   return {
     contract: initialization.address,
     seller: account,
+    reserveMicroCcd,
     reserveSaltHex: bytesToHex(reserveSalt),
     reserveCommitment: Array.from(reserveCommitment),
     parameters: {
@@ -300,11 +307,11 @@ export async function submitBidCommitment(connection, initialization, plan, { ti
 }
 
 export async function submitReserveReveal(connection, initialization, plan, { timeoutMs = 120_000 } = {}) {
-  if (!plan?.reserveSaltHex || connection.accounts[0] !== initialization?.sender) {
+  if (!plan?.reserveSaltHex || !/^(0|[1-9][0-9]*)$/.test(plan.reserveMicroCcd ?? '') || connection.accounts[0] !== initialization?.sender) {
     throw new ConcordiumClientError('RESERVE_BACKUP_UNAVAILABLE', '当前账户或本地底价揭示备份无效，未发送交易。')
   }
   return submitSchemaUpdate(connection, initialization, 'surplus_bid.reveal_reserve', 0, {
-    amount: '2000000', salt: hexToBytes(plan.reserveSaltHex),
+    amount: plan.reserveMicroCcd, salt: hexToBytes(plan.reserveSaltHex),
   }, timeoutMs)
 }
 
@@ -343,14 +350,14 @@ export function loadBidRevealBackup(initialization, bidder) {
 }
 
 export function saveReserveRevealBackup(plan) {
-  if (!plan?.reserveSaltHex || !plan?.parameters || !plan?.contract) {
+  if (!plan?.reserveSaltHex || !/^(0|[1-9][0-9]*)$/.test(plan.reserveMicroCcd ?? '') || !plan?.parameters || !plan?.contract) {
     throw new ConcordiumClientError('ROUND_PLAN_UNAVAILABLE', '没有可保存的底价揭示备份。')
   }
   const backup = {
     format: 'surplus-bid-reserve-reveal-v1',
     contract: plan.contract,
     seller: plan.seller,
-    reserveMicroCcd: '2000000',
+    reserveMicroCcd: plan.reserveMicroCcd,
     reserveSaltHex: plan.reserveSaltHex,
     reserveCommitment: plan.reserveCommitment,
     parameters: plan.parameters,
@@ -375,6 +382,7 @@ export function loadReserveRevealBackup(initialization) {
       String(backup.contract?.index) !== String(initialization.address.index) ||
       String(backup.contract?.subindex) !== String(initialization.address.subindex) ||
       typeof backup.reserveSaltHex !== 'string' || !/^[0-9a-f]{64}$/i.test(backup.reserveSaltHex) ||
+      typeof backup.reserveMicroCcd !== 'string' || !/^(0|[1-9][0-9]*)$/.test(backup.reserveMicroCcd) ||
       !Array.isArray(backup.reserveCommitment) || backup.reserveCommitment.length !== 32 ||
       !backup.parameters
     ) return null

@@ -38,7 +38,20 @@ let auction = null
 let activity = []
 let walletConnection = null
 let observedWalletProvider = null
-let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, pending: null, busy: false }
+let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, pending: null, busy: false, agentBusy: false }
+
+const DEMO_SELLER_DECISION_INPUT = Object.freeze({
+  dataLabel: 'demo data',
+  currentReserveMicroCcd: '2000000',
+  previousSupplyUnits: 1,
+  nextSupplyUnits: 1,
+  rounds: [
+    { id: 'demo-r1', confirmed: true, outcome: 'settled', reserveMicroCcd: '2000000', winningBidsMicroCcd: ['4800000'], bidderCount: 1, supplyUnits: 1 },
+    { id: 'demo-r2', confirmed: true, outcome: 'settled', reserveMicroCcd: '2000000', winningBidsMicroCcd: ['5400000'], bidderCount: 2, supplyUnits: 1 },
+    { id: 'demo-r3', confirmed: true, outcome: 'settled', reserveMicroCcd: '2000000', winningBidsMicroCcd: ['6000000'], bidderCount: 2, supplyUnits: 1 },
+  ],
+  contextNote: '连续成交且参与人数增加；这是 W2D3 固定评测用的 demo data。',
+})
 
 const elements = {
   auctionPhase: byId('auction-phase'),
@@ -46,6 +59,8 @@ const elements = {
   auctionDeadline: byId('auction-deadline'),
   walletButton: byId('wallet-button'),
   walletStatus: byId('wallet-status'),
+  sellerDecisionButton: byId('seller-decision-button'),
+  sellerDecisionStatus: byId('seller-decision-status'),
   deployModuleButton: byId('deploy-module-button'),
   initContractButton: byId('init-contract-button'),
   readViewButton: byId('read-view-button'),
@@ -72,6 +87,44 @@ const elements = {
   evidenceSummary: byId('evidence-summary'),
   evidenceList: byId('evidence-list'),
 }
+
+elements.sellerDecisionButton.addEventListener('click', async () => {
+  if (testnet.agentBusy) return
+  testnet.agentBusy = true
+  testnet.sellerDecision = null
+  elements.sellerDecisionStatus.textContent = '正在调用 Seller Agent，并等待代码裁决…'
+  elements.sellerDecisionStatus.dataset.tone = 'neutral'
+  render()
+  try {
+    const payload = await requestJson('/api/agent/decide', {
+      method: 'POST',
+      body: { taskId: `seller-next-round-${Date.now()}`, input: DEMO_SELLER_DECISION_INPUT },
+      timeoutMs: 20_000,
+      timeoutMessage: 'Seller Agent 请求超时；没有生成可进入钱包流程的底价建议。',
+    })
+    testnet.sellerDecision = payload.decision
+    const decision = payload.decision
+    const reserve = formatMicroCcd(decision.final.reserveMicroCcd)
+    const override = decision.ruleOverride
+      ? `；代码覆盖：${decision.ruleOverride.map((item) => item.code).join(', ')}`
+      : '；代码未覆盖模型提议'
+    elements.sellerDecisionStatus.textContent = [
+      `数据：${decision.dataLabel}；模型：${decision.model}；prompt：${decision.promptVersion}`,
+      `模型判断：${decision.proposed.marketSignal}；最终动作：${decision.final.action}；最终底价：${reserve} CCD${override}`,
+      decision.proposed.reason,
+    ].join('\n')
+    elements.sellerDecisionStatus.dataset.tone = decision.final.action === 'needs_human' ? 'error' : 'success'
+    record(`Seller Agent 建议经代码裁决：${decision.final.action}，下一轮底价 ${reserve} CCD。`, decision.final.action === 'needs_human' ? 'rejected' : 'agent')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    elements.sellerDecisionStatus.textContent = `Seller Agent 未完成：${message}`
+    elements.sellerDecisionStatus.dataset.tone = 'error'
+    record(`Seller Agent 未完成：${message}`, 'rejected')
+  } finally {
+    testnet.agentBusy = false
+    render()
+  }
+})
 
 elements.walletButton.addEventListener('click', async () => {
   elements.walletButton.disabled = true
@@ -142,6 +195,7 @@ elements.initContractButton.addEventListener('click', () => {
     testnet.view = verified.view
     testnet.startPlan = null
     testnet.bidPlan = null
+    testnet.sellerDecision = null
     testnet.pending = null
     record(`Testnet 新实例 <${verified.initialization.address.index},${verified.initialization.address.subindex}> 已创建，并读回 view。`, 'chain')
     setTestnetStatus(formatInitializedStatus(verified.initialization, verified.view), 'success')
@@ -181,7 +235,7 @@ elements.revealReserveButton.addEventListener('click', () => {
     const hash = await submitReserveReveal(connection, testnet.initialization, plan)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'reveal_reserve', hash, sender }
-    const verified = await waitForContractUpdate(hash, 'surplus_bid.reveal_reserve', '0', { sender, reserveMicroCcd: '2000000' })
+    const verified = await waitForContractUpdate(hash, 'surplus_bid.reveal_reserve', '0', { sender, reserveMicroCcd: plan.reserveMicroCcd })
     testnet.view = verified.view; testnet.round = verified.round; testnet.pending = null
     record(`卖家已揭示底价：${shortHash(hash)}。`, 'chain')
     setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
@@ -232,11 +286,17 @@ elements.readViewButton.addEventListener('click', () => {
 elements.startRoundButton.addEventListener('click', () => {
   runTestnetAction('start_round', async () => {
     const connection = walletConnection
-    const plan = await prepareStartRound(connection, testnet.initialization)
+    const decision = testnet.sellerDecision
+    if (!decision || decision.final.action === 'needs_human') {
+      throw new ConcordiumClientError('SELLER_DECISION_REQUIRED', '请先生成通过代码裁决的 Seller Agent 底价建议；needs_human 不会进入钱包流程。')
+    }
+    const plan = await prepareStartRound(connection, testnet.initialization, {
+      reserveMicroCcd: decision.final.reserveMicroCcd,
+    })
     saveReserveRevealBackup(plan)
     testnet.startPlan = plan
     setTestnetStatus(
-      `已生成底价承诺，并将揭示所需的 32 字节盐保存在当前浏览器。\n接下来钱包将请求调用 start_round：锁定 2 CCD 测试保证金；提交期 ${START_ROUND_RULES.commitDurationMs / 60_000} 分钟，两个揭示期各 ${START_ROUND_RULES.sellerRevealDurationMs / 60_000} 分钟。`,
+      `Seller Agent 最终底价为 ${formatMicroCcd(plan.reserveMicroCcd)} CCD；已生成底价承诺，并将揭示所需的 32 字节盐保存在当前浏览器。\n接下来钱包将请求调用 start_round：锁定 2 CCD 测试保证金；提交期 ${START_ROUND_RULES.commitDurationMs / 60_000} 分钟，两个揭示期各 ${START_ROUND_RULES.sellerRevealDurationMs / 60_000} 分钟。`,
       'success',
     )
     const hash = await submitStartRound(connection, testnet.initialization, plan)
@@ -369,7 +429,11 @@ function render() {
   const readyToFinalize = auction?.phase === 'ReadyToFinalize'
 
   elements.createButton.disabled = created && !finalized
-  elements.createButton.textContent = finalized ? '创建下一轮演示' : created ? '规则已固定' : '运行 Seller Agent 并创建'
+  elements.createButton.textContent = finalized ? '创建下一轮本地预览' : created ? '规则已固定' : '创建本地规则预览'
+  elements.sellerDecisionButton.disabled = testnet.agentBusy || testnet.round !== null
+  elements.sellerDecisionButton.textContent = testnet.agentBusy
+    ? 'Seller Agent 决策中…'
+    : testnet.sellerDecision ? '重新生成底价建议' : '生成下一轮底价建议'
   elements.auctionPhase.textContent = auction?.phase ?? 'Draft'
   elements.auctionId.textContent = auction?.id ?? '创建后生成'
   elements.auctionDeadline.textContent = auction ? formatDate(auction.commitEnd) : '创建后生成'
@@ -443,7 +507,8 @@ function renderTestnet() {
   elements.deployModuleButton.disabled = !connected || !hasStatus || testnet.busy || hasDeployment || testnet.pending !== null
   elements.initContractButton.disabled = !connected || !hasStatus || !hasDeployment || testnet.busy || !canCreateReplacement || testnet.pending !== null
   elements.readViewButton.disabled = !connected || !hasInitialization || testnet.busy || testnet.pending !== null
-  elements.startRoundButton.disabled = !connected || !hasInitialization || !isInstanceSeller || hasRound || testnet.busy || testnet.pending !== null
+  const decisionReady = testnet.sellerDecision !== null && testnet.sellerDecision.final.action !== 'needs_human'
+  elements.startRoundButton.disabled = !connected || !hasInitialization || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
   elements.cancelRoundButton.disabled = !connected || !isInstanceSeller || !canCancel || testnet.busy || testnet.pending !== null
   elements.backupReserveButton.disabled = testnet.startPlan === null
   elements.commitBidAButton.disabled = !connected || !commitOpen || isInstanceSeller || bidAddresses.has(currentWalletAccount) || testnet.busy || testnet.pending !== null
@@ -516,7 +581,7 @@ async function waitForFinalization(endpoint, hash, extraBody = {}) {
 
 async function requestJson(url, options = {}) {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15_000)
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 15_000)
   try {
     const response = await fetch(url, {
       method: options.method ?? 'GET',
@@ -530,7 +595,10 @@ async function requestJson(url, options = {}) {
     return payload
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ConcordiumClientError('NETWORK_TIMEOUT', '公共 Testnet 节点请求超时。请检查网络后重试；页面未请求钱包签名。')
+      throw new ConcordiumClientError(
+        'NETWORK_TIMEOUT',
+        options.timeoutMessage ?? '公共 Testnet 节点请求超时。请检查网络后重试；页面未请求钱包签名。',
+      )
     }
     throw error
   } finally {
@@ -704,6 +772,10 @@ function formatDate(value) {
     minute: '2-digit',
     second: '2-digit',
   }).format(date)
+}
+
+function formatMicroCcd(value) {
+  return formatCcd(BigInt(value))
 }
 
 function byId(id) {

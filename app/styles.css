@@ -108,6 +108,10 @@ dd { margin: 7px 0 0; font-size: 1.08rem; font-weight: 800; }
 .button-ghost { border-color: var(--line); background: transparent; color: #c5cec9; }
 
 .todo { margin: 13px 0 0 !important; color: #7d8982 !important; font-size: .72rem; }
+.seller-agent-card { margin: 18px 0; padding: 17px; border: 1px solid #4d4930; border-radius: 13px; background: #19170f; }
+.seller-agent-card .panel-kicker { margin-bottom: 10px; }
+.seller-agent-card p { margin: 0 0 13px; font-size: .78rem; }
+.seller-agent-card code { color: var(--amber); }
 .testnet-check { margin-top: 22px; padding: 17px; border: 1px solid #355845; border-radius: 13px; background: #101a14; }
 .testnet-check .panel-kicker { margin-bottom: 10px; }
 .testnet-check h4 { margin: 0; font-size: .96rem; }

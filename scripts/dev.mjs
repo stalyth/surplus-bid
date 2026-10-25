@@ -18,8 +18,10 @@ import {
   deserializeReceiveReturnValue,
 } from '@concordium/web-sdk'
 import { ConcordiumGRPCNodeClient, credentials } from '@concordium/web-sdk/nodejs'
+import { decideNextReserve } from '../src/decision.mjs'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
+loadLocalEnv(resolve(repoRoot, '.env'))
 const host = '127.0.0.1'
 const port = parsePort(process.env.PORT)
 const testnetGenesis = '4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796'
@@ -56,6 +58,12 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', `http://${host}:${port}`)
     if (request.method === 'GET' && url.pathname === '/health') {
       sendJson(response, 200, { ok: true, service: 'surplus-bid-walking-skeleton' })
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/api/agent/decide') {
+      const body = await readJson(request)
+      const decision = await decideNextReserve(body.taskId, body.input)
+      sendJson(response, 200, { ok: true, decision })
       return
     }
     if (url.pathname.startsWith('/api/testnet/')) {
@@ -106,7 +114,7 @@ const server = createServer(async (request, response) => {
   }
 })
 
-server.requestTimeout = 15_000
+server.requestTimeout = 30_000
 server.headersTimeout = 10_000
 server.on('error', (error) => {
   console.error(`Could not start SurplusBid: ${error.message}`)
@@ -601,6 +609,14 @@ function parsePort(value) {
     process.exit(1)
   }
   return parsed
+}
+
+function loadLocalEnv(path) {
+  try {
+    process.loadEnvFile(path)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
 }
 
 function resolvePublicFile(pathname) {

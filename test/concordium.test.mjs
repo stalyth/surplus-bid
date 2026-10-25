@@ -113,6 +113,21 @@ test('prepares a seller-bound start_round with the fixed 20 + 5 + 5 minute windo
   }
 })
 
+test('binds the code-validated Seller Agent reserve into the hidden start-round commitment', async () => {
+  const originalWindow = globalThis.window
+  globalThis.window = { concordiumSDK: sdk }
+  try {
+    const plan = await prepareStartRound({ accounts: [INSTANCE.sender] }, INSTANCE, {
+      now: 1_790_000_000_000,
+      reserveMicroCcd: '2300000',
+    })
+    assert.equal(plan.reserveMicroCcd, '2300000')
+    assert.equal(plan.reserveCommitment.length, 32)
+  } finally {
+    globalThis.window = originalWindow
+  }
+})
+
 test('rejects start_round before any wallet request when the selected account is not this instance seller', async () => {
   const originalWindow = globalThis.window
   globalThis.window = { concordiumSDK: sdk }
