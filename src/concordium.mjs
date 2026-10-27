@@ -9,16 +9,10 @@ export const INITIAL_MARKET = Object.freeze({
 
 export const START_ROUND_RULES = Object.freeze({
   guaranteeCcd: 2,
-  commitDurationMs: 20 * 60_000,
-  sellerRevealDurationMs: 5 * 60_000,
-  buyerRevealDurationMs: 5 * 60_000,
+  commitDurationMs: 8 * 60_000,
+  revealDurationMs: 5 * 60_000,
   maxBids: 2,
 })
-export const REAL_BID_OPTIONS = Object.freeze([
-  { id: 'buyer-a', label: '买家 A', amountCcd: 4 },
-  { id: 'buyer-b', label: '买家 B', amountCcd: 6 },
-])
-
 export class ConcordiumClientError extends Error {
   constructor(code, message) {
     super(message)
@@ -51,6 +45,19 @@ export function assertTransactionHash(value) {
   return value
 }
 
+export function parseCcdToMicroCcd(value) {
+  if (typeof value !== 'string') {
+    throw new ConcordiumClientError('INVALID_CCD_AMOUNT', '报价必须是 CCD 十进制金额。')
+  }
+  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,6}))?$/.exec(value.trim())
+  if (!match) {
+    throw new ConcordiumClientError('INVALID_CCD_AMOUNT', '报价最多保留 6 位小数，且不能使用负数、科学计数法或空值。')
+  }
+  const whole = BigInt(match[1])
+  const fractional = BigInt((match[2] ?? '').padEnd(6, '0') || '0')
+  return (whole * 1_000_000n + fractional).toString()
+}
+
 export function getTransactionSender(connection) {
   const sender = connection?.accounts?.[0]
   if (typeof sender !== 'string' || sender.length === 0) {
@@ -75,6 +82,15 @@ export function hasRevealedBid(view, bidder) {
   const bid = view?.state?.bids?.find((item) => String(item.bidder) === bidder)
   const revealed = bid?.revealed_bid
   return Boolean(revealed && typeof revealed === 'object' && Object.prototype.hasOwnProperty.call(revealed, 'Some'))
+}
+
+export function deriveAuctionRole({ account, initialization, view } = {}) {
+  if (typeof account !== 'string' || account.length === 0) return 'observer'
+  if (!initialization?.sender) return 'sellerCandidate'
+  if (account === initialization.sender) return 'seller'
+  const hasCommitted = Array.isArray(view?.state?.bids)
+    && view.state.bids.some((bid) => String(bid.bidder) === account)
+  return hasCommitted ? 'committedBuyer' : 'buyer'
 }
 
 export async function connectConcordiumWallet({ timeoutMs = 15_000 } = {}) {
@@ -215,8 +231,7 @@ export async function prepareStartRound(connection, initialization, {
   const reserveSalt = new Uint8Array(32)
   crypto.getRandomValues(reserveSalt)
   const commitEnd = now + START_ROUND_RULES.commitDurationMs
-  const sellerRevealEnd = commitEnd + START_ROUND_RULES.sellerRevealDurationMs
-  const buyerRevealEnd = sellerRevealEnd + START_ROUND_RULES.buyerRevealDurationMs
+  const revealEnd = commitEnd + START_ROUND_RULES.revealDurationMs
   const reserveCommitment = await createCommitment({
     sdk,
     domain: 'SURPLUS_BID_RESERVE_V1',
@@ -235,8 +250,7 @@ export async function prepareStartRound(connection, initialization, {
     parameters: {
       reserve_commitment: Array.from(reserveCommitment),
       commit_end: String(commitEnd),
-      seller_reveal_end: String(sellerRevealEnd),
-      buyer_reveal_end: String(buyerRevealEnd),
+      reveal_end: String(revealEnd),
       max_bids: START_ROUND_RULES.maxBids,
     },
   }
@@ -289,10 +303,11 @@ export async function submitCancelRound(connection, initialization, { timeoutMs 
   return assertTransactionHash(hash)
 }
 
-export async function prepareBidCommitment(connection, initialization, amountCcd) {
+export async function prepareBidCommitment(connection, initialization, amountMicroCcd) {
   const sdk = requireTransactionSdk()
-  if (!initialization?.address || !Number.isInteger(amountCcd) || amountCcd < START_ROUND_RULES.guaranteeCcd) {
-    throw new ConcordiumClientError('INVALID_BID', '报价必须是不低于 2 CCD 的整数测试报价。')
+  const guaranteeMicroCcd = BigInt(START_ROUND_RULES.guaranteeCcd) * 1_000_000n
+  if (!initialization?.address || typeof amountMicroCcd !== 'string' || !/^(0|[1-9][0-9]*)$/.test(amountMicroCcd) || BigInt(amountMicroCcd) < guaranteeMicroCcd) {
+    throw new ConcordiumClientError('INVALID_BID', '报价必须不低于 2 CCD，且最多保留 6 位小数。')
   }
   const bidder = connection.accounts[0]
   if (bidder === initialization.sender) {
@@ -300,21 +315,20 @@ export async function prepareBidCommitment(connection, initialization, amountCcd
   }
   const salt = new Uint8Array(32)
   crypto.getRandomValues(salt)
-  const amountMicroCcd = BigInt(amountCcd) * 1_000_000n
+  const amountMicro = BigInt(amountMicroCcd)
   const commitment = await createCommitment({
     sdk,
     domain: 'SURPLUS_BID_BID_V1',
     contract: initialization.address,
     account: bidder,
-    amountMicroCcd,
+    amountMicroCcd: amountMicro,
     salt,
   })
   return {
     format: 'surplus-bid-bid-reveal-v1',
     contract: initialization.address,
     bidder,
-    amountMicroCcd: amountMicroCcd.toString(),
-    amountCcd,
+    amountMicroCcd: amountMicro.toString(),
     saltHex: bytesToHex(salt),
     commitment: Array.from(commitment),
   }
@@ -324,14 +338,14 @@ export async function submitBidCommitment(connection, initialization, plan, { ti
   if (!plan?.commitment || !initialization?.address || plan.bidder !== connection.accounts[0]) {
     throw new ConcordiumClientError('BID_PLAN_UNAVAILABLE', '报价承诺参数缺失，未发送交易。')
   }
-  return submitSchemaUpdate(connection, initialization, 'surplus_bid.commit_bid', START_ROUND_RULES.guaranteeCcd, plan.commitment, timeoutMs)
+  return submitSchemaUpdate(connection, initialization, 'surplus_bid.commit_bid', String(BigInt(START_ROUND_RULES.guaranteeCcd) * 1_000_000n), plan.commitment, timeoutMs)
 }
 
 export async function submitReserveReveal(connection, initialization, plan, { timeoutMs = 120_000 } = {}) {
   if (!plan?.reserveSaltHex || !/^(0|[1-9][0-9]*)$/.test(plan.reserveMicroCcd ?? '') || connection.accounts[0] !== initialization?.sender) {
     throw new ConcordiumClientError('RESERVE_BACKUP_UNAVAILABLE', '当前账户或本地底价揭示备份无效，未发送交易。')
   }
-  return submitSchemaUpdate(connection, initialization, 'surplus_bid.reveal_reserve', 0, {
+  return submitSchemaUpdate(connection, initialization, 'surplus_bid.reveal_reserve', '0', {
     amount: plan.reserveMicroCcd, salt: hexToBytes(plan.reserveSaltHex),
   }, timeoutMs)
 }
@@ -340,8 +354,8 @@ export async function submitBidReveal(connection, initialization, plan, { timeou
   if (!plan?.saltHex || plan.bidder !== connection.accounts[0]) {
     throw new ConcordiumClientError('BID_BACKUP_UNAVAILABLE', '当前账户或本地报价揭示备份无效，未发送交易。')
   }
-  const topUpCcd = plan.amountCcd - START_ROUND_RULES.guaranteeCcd
-  return submitSchemaUpdate(connection, initialization, 'surplus_bid.reveal_bid', topUpCcd, {
+  const topUpMicroCcd = BigInt(plan.amountMicroCcd) - BigInt(START_ROUND_RULES.guaranteeCcd) * 1_000_000n
+  return submitSchemaUpdate(connection, initialization, 'surplus_bid.reveal_bid', topUpMicroCcd.toString(), {
     amount: String(plan.amountMicroCcd), salt: hexToBytes(plan.saltHex),
   }, timeoutMs)
 }
@@ -431,6 +445,7 @@ function requireTransactionSdk() {
     sdk?.AccountTransactionType?.InitContract === undefined ||
     sdk?.AccountTransactionType?.Update === undefined ||
     !sdk?.CcdAmount?.fromCcd ||
+    !sdk?.CcdAmount?.fromMicroCcd ||
     !sdk?.ContractAddress?.create ||
     !sdk?.ModuleReference?.fromHexString ||
     !sdk?.ReceiveName?.fromString ||
@@ -490,10 +505,10 @@ function bidBackupKey(plan) {
   return `surplus-bid:bid-reveal:v1:${plan.contract.index}:${plan.contract.subindex}:${plan.bidder}`
 }
 
-async function submitSchemaUpdate(connection, initialization, receiveName, amountCcd, parameters, timeoutMs) {
+async function submitSchemaUpdate(connection, initialization, receiveName, amountMicroCcd, parameters, timeoutMs) {
   const sdk = requireTransactionSdk()
   await verifyWalletAuthorization(connection, timeoutMs)
-  const payload = updatePayload(sdk, initialization, receiveName, amountCcd)
+  const payload = updatePayload(sdk, initialization, receiveName, amountMicroCcd)
   const hash = await withTimeout(connection.provider.sendTransaction(connection.accounts[0], sdk.AccountTransactionType.Update, payload, parameters, await getSchemaBase64()), timeoutMs, `等待钱包确认 ${receiveName} 超时。请检查原请求，勿重复发送。`)
   return assertTransactionHash(hash)
 }
@@ -532,9 +547,9 @@ async function requestWalletAccountSelection(provider, timeoutMs, timeoutMessage
   return [...new Set(normalizeConnectedAccounts(selected))]
 }
 
-function updatePayload(sdk, initialization, receiveName, amountCcd) {
+function updatePayload(sdk, initialization, receiveName, amountMicroCcd) {
   return {
-    amount: sdk.CcdAmount.fromCcd(amountCcd),
+    amount: sdk.CcdAmount.fromMicroCcd(BigInt(amountMicroCcd)),
     address: sdk.ContractAddress.create(BigInt(initialization.address.index), BigInt(initialization.address.subindex)),
     receiveName: sdk.ReceiveName.fromString(receiveName),
     maxContractExecutionEnergy: sdk.Energy.create(100_000),

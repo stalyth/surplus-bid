@@ -27,6 +27,7 @@ const port = parsePort(process.env.PORT)
 const testnetGenesis = '4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796'
 const contractName = ContractName.fromString('surplus_bid')
 const platformAddress = '4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4'
+const protocolVersion = 'shared-reveal-v2'
 const testnetClient = new ConcordiumGRPCNodeClient(
   'grpc.testnet.concordium.com', 20_000, credentials.createSsl(), { timeout: 10_000 },
 )
@@ -129,14 +130,17 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.clos
 
 async function handleTestnetApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/testnet/status') {
-    const artifact = loadArtifacts()
+    const artifactStatus = inspectArtifacts()
     const consensus = await getTestnetConsensus()
-    const view = verified.initialization ? await readInitializedState() : null
+    const view = artifactStatus.ready && verified.initialization ? await readInitializedState() : null
     if (view) restoreObservedRound(view)
     sendJson(response, 200, {
       ok: true,
       network: 'Concordium Testnet',
-      moduleReference: artifact.moduleReference,
+      moduleReference: artifactStatus.artifact?.moduleReference ?? null,
+      contractReady: artifactStatus.ready,
+      contractIssue: artifactStatus.issue,
+      protocolVersion,
       contractName: 'surplus_bid',
       platformAddress,
       lastFinalizedBlock: String(consensus.lastFinalizedBlock),
@@ -273,8 +277,7 @@ async function verifyStartRound({ hash, sender, plan }) {
   if (!actualRound) throw new Error('链上 view 未记录本轮参数。')
   if (
     normalizeTimestamp(actualRound.commit_end) !== expected.commitEnd ||
-    normalizeTimestamp(actualRound.seller_reveal_end) !== expected.sellerRevealEnd ||
-    normalizeTimestamp(actualRound.buyer_reveal_end) !== expected.buyerRevealEnd ||
+    normalizeTimestamp(actualRound.reveal_end) !== expected.revealEnd ||
     Number(actualRound.max_bids) !== expected.maxBids ||
     !equalNumberArrays(actualRound.reserve_commitment, expected.reserveCommitment)
   ) {
@@ -284,8 +287,7 @@ async function verifyStartRound({ hash, sender, plan }) {
     hash,
     roundId: '1',
     commitEnd: expected.commitEnd,
-    sellerRevealEnd: expected.sellerRevealEnd,
-    buyerRevealEnd: expected.buyerRevealEnd,
+    revealEnd: expected.revealEnd,
     maxBids: expected.maxBids,
     reserveCommitment: expected.reserveCommitment,
     blockHash: String(outcome.blockHash),
@@ -315,14 +317,15 @@ async function verifyCancelRound({ hash, sender }) {
     CcdAmount.toMicroCcd(update.amount).toFixed(0) !== '0'
   ) throw new Error('最终交易不是当前实例的 0 CCD surplus_bid.cancel 调用。')
   const view = await readInitializedState()
-  if (variantName(view.state.phase) !== 'NoSale' || view.contractBalanceMicroCcd !== '0') {
-    throw new Error('cancel 后链上状态或余额不符合空轮次退款规则。')
+  const phase = variantName(view.state.phase)
+  if (!['NoSale', 'Cancelled'].includes(phase) || view.contractBalanceMicroCcd !== '0') {
+    throw new Error('cancel 后链上状态或余额不符合退款规则。')
   }
   restoreObservedRound(view)
   verified.round = {
     ...verified.round,
     hash,
-    phase: 'NoSale',
+    phase,
     explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
   }
   return { final: true, round: verified.round, view }
@@ -383,7 +386,7 @@ function verifyUpdateState(receiveName, view, sender, expected) {
   }
 
   if (receiveName === 'surplus_bid.reveal_reserve') {
-    if (variantName(state.phase) !== 'ReserveRevealed') throw new Error('reveal_reserve 后链上 view 未进入 ReserveRevealed。')
+    if (variantName(state.phase) !== 'Reveal') throw new Error('reveal_reserve 后链上 view 未进入 Reveal。')
     if (String(optionValue(state.reserve)) !== String(expected.reserveMicroCcd)) {
       throw new Error('链上揭示的底价与页面承诺值不一致。')
     }
@@ -391,7 +394,7 @@ function verifyUpdateState(receiveName, view, sender, expected) {
   }
 
   if (receiveName === 'surplus_bid.reveal_bid') {
-    if (variantName(state.phase) !== 'ReserveRevealed') throw new Error('reveal_bid 后链上 view 未保持 ReserveRevealed。')
+    if (variantName(state.phase) !== 'Reveal') throw new Error('reveal_bid 后链上 view 未保持 Reveal。')
     const bid = bids.find((item) => sameAccountAddress(item.bidder, senderAddress))
     if (!bid || !sameAccountAddress(expected.bidder, senderAddress)) {
       throw new Error('reveal_bid 的签名账户与同一 round 的买家承诺不一致。')
@@ -404,11 +407,13 @@ function verifyUpdateState(receiveName, view, sender, expected) {
 
   if (receiveName === 'surplus_bid.finalize') {
     if (expected.requireSettlement !== true) throw new Error('结算缺少页面的明确核验要求。')
-    if (variantName(state.phase) !== 'Settled' || view.contractBalanceMicroCcd !== '0') {
-      throw new Error('finalize 后链上未进入 Settled 或合约余额未归零。')
+    const phase = variantName(state.phase)
+    if (!['Settled', 'NoSale'].includes(phase) || view.contractBalanceMicroCcd !== '0') {
+      throw new Error('finalize 后链上状态或合约余额不符合结算规则。')
     }
     const allocations = Array.isArray(state.allocations) ? state.allocations : []
-    if (allocations.length !== bids.length || allocations.filter((item) => item.won === true).length !== 1) {
+    const winnerCount = allocations.filter((item) => item.won === true).length
+    if (allocations.length !== bids.length || (phase === 'Settled' && winnerCount !== 1) || (phase === 'NoSale' && winnerCount !== 0)) {
       throw new Error('finalize 后链上赢家分配与同一 round 的报价记录不一致。')
     }
     return
@@ -461,7 +466,26 @@ async function getTestnetConsensus() {
 function loadArtifacts() {
   const module = readFileSync(resolve(repoRoot, 'contracts', 'sealed-auction', 'module.wasm.v1'))
   const schema = readFileSync(resolve(repoRoot, 'contracts', 'sealed-auction', 'schema.bin'))
-  return { moduleReference: createHash('sha256').update(module).digest('hex'), schema }
+  const moduleReference = createHash('sha256').update(module).digest('hex')
+  const manifestPath = resolve(repoRoot, 'contracts', 'sealed-auction', 'artifact-manifest.json')
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  } catch {
+    throw new Error('当前 Wasm/schema 没有 shared-reveal-v2 构建清单。请先运行 ./scripts/check-contract.sh 生成并验证新合约，旧顺序揭示 artifact 不可用于开始新轮次。')
+  }
+  if (manifest.protocolVersion !== protocolVersion || manifest.moduleReference !== moduleReference) {
+    throw new Error('当前 Wasm/schema 与 shared-reveal-v2 构建清单不一致。请重新运行 ./scripts/check-contract.sh；不要用旧 schema 发起 start_round。')
+  }
+  return { moduleReference, schema }
+}
+
+function inspectArtifacts() {
+  try {
+    return { ready: true, artifact: loadArtifacts(), issue: null }
+  } catch (error) {
+    return { ready: false, artifact: null, issue: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 function loadRecordedVerification() {
@@ -513,20 +537,19 @@ function validatePublicRoundPlan(plan, initialization) {
   const parameters = plan.parameters
   const reserveCommitment = parameters.reserve_commitment
   const commitEnd = normalizeTimestamp(parameters.commit_end)
-  const sellerRevealEnd = normalizeTimestamp(parameters.seller_reveal_end)
-  const buyerRevealEnd = normalizeTimestamp(parameters.buyer_reveal_end)
+  const revealEnd = normalizeTimestamp(parameters.reveal_end)
   const maxBids = Number(parameters.max_bids)
-  if (!commitEnd || !sellerRevealEnd || !buyerRevealEnd) {
+  if (!commitEnd || !revealEnd) {
     throw new Error('本轮截止时间格式无效。')
   }
-  if (!(BigInt(commitEnd) < BigInt(sellerRevealEnd) && BigInt(sellerRevealEnd) < BigInt(buyerRevealEnd))) {
+  if (!(BigInt(commitEnd) < BigInt(revealEnd))) {
     throw new Error('本轮截止时间顺序无效。')
   }
   if (maxBids < 1 || maxBids > 16 || !Number.isInteger(maxBids)) throw new Error('本轮最大报价数量无效。')
   if (!Array.isArray(reserveCommitment) || reserveCommitment.length !== 32 || reserveCommitment.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
     throw new Error('底价承诺必须是 32 字节。')
   }
-  return { commitEnd, sellerRevealEnd, buyerRevealEnd, maxBids, reserveCommitment }
+  return { commitEnd, revealEnd, maxBids, reserveCommitment }
 }
 
 function restoreObservedRound(view) {
@@ -541,8 +564,7 @@ function restoreObservedRound(view) {
     roundId: '1',
     phase: variantName(view.state.phase),
     commitEnd: normalizeTimestamp(actual.commit_end),
-    sellerRevealEnd: normalizeTimestamp(actual.seller_reveal_end),
-    buyerRevealEnd: normalizeTimestamp(actual.buyer_reveal_end),
+    revealEnd: normalizeTimestamp(actual.reveal_end),
     maxBids: Number(actual.max_bids),
     reserveCommitment: Array.from(actual.reserve_commitment, Number),
     explorerUrl: verified.round?.explorerUrl ?? verified.initialization.contractUrl,

@@ -1,7 +1,7 @@
 {
   "network": "Concordium Testnet",
   "recordedAt": "2026-10-25",
-  "dataKind": "Real Testnet evidence for the current surplus_bid module, including two bid commitments, reserve reveal, one bid reveal, settlement, and an unrevealed-bid forfeiture",
+  "dataKind": "Historical Testnet evidence for the predecessor surplus_bid module with sequential reveal windows; it does not validate the current shared-reveal implementation",
   "module": {
     "contractName": "surplus_bid",
     "reference": "7868967efbe78ea19f340e193449f728e7e0de77ec7f7a50654d6c33c590c77a",

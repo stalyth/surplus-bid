@@ -10,8 +10,7 @@ const B: AccountAddress = AccountAddress([2; 32]);
 const PLATFORM: AccountAddress = AccountAddress([30; 32]);
 const GUARANTEE: Amount = Amount::from_ccd(2);
 const COMMIT_END: u64 = 1_000;
-const SELLER_REVEAL_END: u64 = 2_000;
-const BUYER_REVEAL_END: u64 = 3_000;
+const REVEAL_END: u64 = 2_000;
 const RESERVE_COMMITMENT: Commitment = [
     178, 143, 135, 28, 83, 104, 54, 217, 234, 157, 194, 108, 206, 238, 251, 124, 43,
     20, 235, 199, 130, 139, 74, 253, 92, 255, 220, 140, 135, 111, 111, 44,
@@ -149,8 +148,7 @@ fn start(
         &StartParams {
             reserve_commitment: commitment(true, address, SELLER, reserve, 9),
             commit_end: Timestamp::from_timestamp_millis(COMMIT_END),
-            seller_reveal_end: Timestamp::from_timestamp_millis(SELLER_REVEAL_END),
-            buyer_reveal_end: Timestamp::from_timestamp_millis(BUYER_REVEAL_END),
+            reveal_end: Timestamp::from_timestamp_millis(REVEAL_END),
             max_bids: 2,
         },
         GUARANTEE,
@@ -264,17 +262,16 @@ fn sealed_two_buyer_flow_settles_and_conserves_every_microccd() {
 
     chain
         .tick_block_time(Duration::from_millis(COMMIT_END))
-        .expect("advance to seller reveal");
-    let seller_reveal = reveal_reserve(&mut chain, address, reserve);
-    chain
-        .tick_block_time(Duration::from_millis(SELLER_REVEAL_END - COMMIT_END))
-        .expect("advance to buyer reveal");
+        .expect("advance to shared reveal");
+    // A buyer may reveal before the seller: both reveals share one time window.
     let revealed_a = reveal_bid(&mut chain, address, A, Amount::from_ccd(4), 1);
+    assert_eq!(view(&chain, address).phase, Phase::Reveal);
+    let seller_reveal = reveal_reserve(&mut chain, address, reserve);
     let revealed_b = reveal_bid(&mut chain, address, B, Amount::from_ccd(6), 2);
     assert_eq!(chain.contract_balance(address), Some(Amount::from_ccd(12)));
 
     chain
-        .tick_block_time(Duration::from_millis(BUYER_REVEAL_END - SELLER_REVEAL_END))
+        .tick_block_time(Duration::from_millis(REVEAL_END - COMMIT_END))
         .expect("advance to finalize");
     let finalized = update_empty(&mut chain, address, A, "finalize").expect("finalize");
     let state = view(&chain, address);
@@ -389,8 +386,8 @@ fn seller_missing_reveal_refunds_buyers_and_distributes_seller_guarantee() {
     let committed_b = commit(&mut chain, address, B, Amount::from_ccd(6), 2);
     let before_cancel = [A, B].map(|account| balance(&chain, account));
     chain
-        .tick_block_time(Duration::from_millis(SELLER_REVEAL_END))
-        .expect("advance past seller reveal");
+        .tick_block_time(Duration::from_millis(REVEAL_END))
+        .expect("advance past shared reveal");
     let cancelled = update_empty(&mut chain, address, B, "cancel").expect("cancel round");
 
     assert_eq!(view(&chain, address).phase, Phase::Cancelled);
@@ -459,14 +456,11 @@ fn empty_round_and_below_reserve_bid_close_without_trapped_funds() {
     commit(&mut chain, address, A, Amount::from_ccd(1), 3);
     chain
         .tick_block_time(Duration::from_millis(COMMIT_END))
-        .expect("advance to seller reveal");
+        .expect("advance to shared reveal");
     reveal_reserve(&mut chain, address, Amount::from_ccd(2));
-    chain
-        .tick_block_time(Duration::from_millis(SELLER_REVEAL_END - COMMIT_END))
-        .expect("advance to buyer reveal");
     reveal_bid(&mut chain, address, A, Amount::from_ccd(1), 3);
     chain
-        .tick_block_time(Duration::from_millis(BUYER_REVEAL_END - SELLER_REVEAL_END))
+        .tick_block_time(Duration::from_millis(REVEAL_END - COMMIT_END))
         .expect("advance to finalize");
     update_empty(&mut chain, address, B, "finalize").expect("finalize no-sale round");
     assert_eq!(view(&chain, address).phase, Phase::NoSale);
@@ -481,15 +475,12 @@ fn equal_revealed_bids_use_earlier_commitment_sequence() {
     commit(&mut chain, address, B, Amount::from_ccd(6), 2);
     chain
         .tick_block_time(Duration::from_millis(COMMIT_END))
-        .expect("advance to seller reveal");
+        .expect("advance to shared reveal");
     reveal_reserve(&mut chain, address, Amount::from_ccd(2));
-    chain
-        .tick_block_time(Duration::from_millis(SELLER_REVEAL_END - COMMIT_END))
-        .expect("advance to buyer reveal");
     reveal_bid(&mut chain, address, A, Amount::from_ccd(6), 4);
     reveal_bid(&mut chain, address, B, Amount::from_ccd(6), 2);
     chain
-        .tick_block_time(Duration::from_millis(BUYER_REVEAL_END - SELLER_REVEAL_END))
+        .tick_block_time(Duration::from_millis(REVEAL_END - COMMIT_END))
         .expect("advance to finalize");
     update_empty(&mut chain, address, SELLER, "finalize").expect("finalize tie");
 

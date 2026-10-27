@@ -20,8 +20,7 @@ pub struct InitParams {
 pub struct StartParams {
     pub reserve_commitment: Commitment,
     pub commit_end: Timestamp,
-    pub seller_reveal_end: Timestamp,
-    pub buyer_reveal_end: Timestamp,
+    pub reveal_end: Timestamp,
     pub max_bids: u16,
 }
 
@@ -44,7 +43,7 @@ pub struct BidCommitment {
 pub enum Phase {
     Idle,
     Commit,
-    ReserveRevealed,
+    Reveal,
     Settled,
     NoSale,
     Cancelled,
@@ -120,8 +119,7 @@ pub struct RoundStartedEvent {
     pub round_id: u64,
     pub reserve_commitment: Commitment,
     pub commit_end: Timestamp,
-    pub seller_reveal_end: Timestamp,
-    pub buyer_reveal_end: Timestamp,
+    pub reveal_end: Timestamp,
 }
 
 #[derive(Debug, Serialize, SchemaType, Clone, PartialEq, Eq)]
@@ -264,8 +262,7 @@ fn start_round(
     let now = ctx.metadata().slot_time();
     ensure!(
         now < params.commit_end
-            && params.commit_end < params.seller_reveal_end
-            && params.seller_reveal_end < params.buyer_reveal_end
+            && params.commit_end < params.reveal_end
             && params.max_bids > 0
             && params.max_bids <= MAX_BIDS,
         Error::InvalidRules
@@ -276,8 +273,7 @@ fn start_round(
         round_id: ROUND_ID,
         reserve_commitment: params.reserve_commitment,
         commit_end: params.commit_end,
-        seller_reveal_end: params.seller_reveal_end,
-        buyer_reveal_end: params.buyer_reveal_end,
+        reveal_end: params.reveal_end,
     }))?;
     let state = host.state_mut();
     state.phase = Phase::Commit;
@@ -354,10 +350,10 @@ fn reveal_reserve(
     let reveal: RevealParams = ctx.parameter_cursor().get().map_err(|_| Error::Parse)?;
     let state = host.state();
     let round = state.round.as_ref().ok_or(Error::WrongPhase)?;
-    ensure_eq!(state.phase, Phase::Commit, Error::WrongPhase);
+    ensure!(matches!(state.phase, Phase::Commit | Phase::Reveal), Error::WrongPhase);
     ensure_eq!(account_sender(ctx)?, state.seller, Error::Unauthorized);
     let now = ctx.metadata().slot_time();
-    ensure!(now >= round.commit_end && now < round.seller_reveal_end, Error::WrongTime);
+    ensure!(now >= round.commit_end && now < round.reveal_end, Error::WrongTime);
     let actual = make_commitment(
         &ExternCryptoPrimitives,
         true,
@@ -373,7 +369,7 @@ fn reveal_reserve(
     }))?;
     let state = host.state_mut();
     state.reserve = Some(reveal.amount);
-    state.phase = Phase::ReserveRevealed;
+    state.phase = Phase::Reveal;
     Ok(())
 }
 
@@ -396,10 +392,10 @@ fn reveal_bid(
     let bidder = account_sender(ctx)?;
     let state = host.state();
     let round = state.round.as_ref().ok_or(Error::WrongPhase)?;
-    ensure_eq!(state.phase, Phase::ReserveRevealed, Error::WrongPhase);
+    ensure!(matches!(state.phase, Phase::Commit | Phase::Reveal), Error::WrongPhase);
     let now = ctx.metadata().slot_time();
     ensure!(
-        now >= round.seller_reveal_end && now < round.buyer_reveal_end,
+        now >= round.commit_end && now < round.reveal_end,
         Error::WrongTime
     );
     let index = state
@@ -440,10 +436,12 @@ fn reveal_bid(
         bid: reveal.amount,
         sequence,
     }))?;
-    let item = &mut host.state_mut().bids[index];
+    let state = host.state_mut();
+    let item = &mut state.bids[index];
     item.revealed_bid = Some(reveal.amount);
     item.escrow = Amount::from_micro_ccd(escrow);
-    host.state_mut().total_deposited = Amount::from_micro_ccd(total);
+    state.total_deposited = Amount::from_micro_ccd(total);
+    state.phase = Phase::Reveal;
     Ok(())
 }
 
@@ -493,8 +491,8 @@ fn finalize(
 ) -> Result<(), Error> {
     let state = host.state();
     let round = state.round.as_ref().ok_or(Error::WrongPhase)?;
-    ensure_eq!(state.phase, Phase::ReserveRevealed, Error::WrongPhase);
-    ensure!(ctx.metadata().slot_time() >= round.buyer_reveal_end, Error::WrongTime);
+    ensure_eq!(state.phase, Phase::Reveal, Error::WrongPhase);
+    ensure!(ctx.metadata().slot_time() >= round.reveal_end, Error::WrongTime);
     ensure_eq!(host.self_balance(), state.total_deposited, Error::BalanceMismatch);
     let reserve = state.reserve.ok_or(Error::WrongPhase)?;
 
@@ -608,10 +606,10 @@ fn cancel(
 ) -> Result<(), Error> {
     let state = host.state();
     let round = state.round.as_ref().ok_or(Error::WrongPhase)?;
-    ensure_eq!(state.phase, Phase::Commit, Error::WrongPhase);
+    ensure!(matches!(state.phase, Phase::Commit | Phase::Reveal), Error::WrongPhase);
     let now = ctx.metadata().slot_time();
     let empty = state.bids.is_empty() && now >= round.commit_end;
-    let seller_missed = !state.bids.is_empty() && now >= round.seller_reveal_end;
+    let seller_missed = !state.bids.is_empty() && state.reserve.is_none() && now >= round.reveal_end;
     ensure!(empty || seller_missed, Error::WrongTime);
     ensure_eq!(host.self_balance(), state.total_deposited, Error::BalanceMismatch);
 

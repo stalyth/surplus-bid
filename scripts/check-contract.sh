@@ -20,3 +20,5 @@ export CARGO_TARGET_DIR="$repo_dir/contracts/sealed-auction/target"
 cd "$repo_dir/contracts/sealed-auction"
 cargo concordium build --out module.wasm.v1 --schema-out schema.bin -- --locked
 cargo test --locked
+module_reference=$(shasum -a 256 module.wasm.v1 | awk '{print $1}')
+printf '{\n  "protocolVersion": "shared-reveal-v2",\n  "moduleReference": "%s"\n}\n' "$module_reference" > artifact-manifest.json

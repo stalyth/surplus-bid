@@ -1,26 +1,16 @@
-import {
-  DEMO_AGENTS,
-  DemoRuleError,
-  closeBuyerReveal,
-  closeCommitAndReveal,
-  commitDemoBid,
-  contractBalanceMicro,
-  createDemoAuction,
-  finalizeDemoAuction,
-  formatCcd,
-  revealDemoBid,
-} from '/src/rules.mjs'
+import { formatCcd } from '/src/rules.mjs'
 import {
   ConcordiumClientError,
   connectConcordiumWallet,
   downloadReserveRevealBackup,
+  deriveAuctionRole,
   getTransactionSender,
   hasRevealedBid,
   loadReserveRevealBackup,
   loadBidRevealBackup,
+  parseCcdToMicroCcd,
   prepareStartRound,
   prepareBidCommitment,
-  REAL_BID_OPTIONS,
   START_ROUND_RULES,
   saveReserveRevealBackup,
   saveBidRevealBackup,
@@ -37,11 +27,11 @@ import {
 } from '/src/concordium.mjs'
 
 const runtime = await loadRuntimeConfig()
-let auction = null
 let activity = []
 let walletConnection = null
 let observedWalletProvider = null
-let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, pending: null, busy: false, agentBusy: false }
+let historicalEvidence = null
+let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, transactions: [], pending: null, busy: false, agentBusy: false }
 
 const DEMO_SELLER_DECISION_INPUT = Object.freeze({
   dataLabel: 'demo data',
@@ -67,28 +57,28 @@ const elements = {
   walletAccountNotice: byId('wallet-account-notice'),
   sellerDecisionButton: byId('seller-decision-button'),
   sellerDecisionStatus: byId('seller-decision-status'),
+  sellerAgentCard: byId('seller-agent-card'),
   deployModuleButton: byId('deploy-module-button'),
   initContractButton: byId('init-contract-button'),
   readViewButton: byId('read-view-button'),
   startRoundButton: byId('start-round-button'),
   cancelRoundButton: byId('cancel-round-button'),
   backupReserveButton: byId('backup-reserve-button'),
-  commitBidAButton: byId('commit-bid-a-button'),
-  commitBidBButton: byId('commit-bid-b-button'),
+  bidAmountInput: byId('bid-amount-input'),
+  commitBidButton: byId('commit-bid-button'),
   revealReserveButton: byId('reveal-reserve-button'),
   revealBidButton: byId('reveal-bid-button'),
   finalizeChainButton: byId('finalize-chain-button'),
+  roleSummary: byId('role-summary'),
+  roleLabel: byId('role-label'),
+  roleStage: byId('role-stage'),
+  roleGuidance: byId('role-guidance'),
+  sellerPublishActions: byId('seller-publish-actions'),
+  buyerCommitShell: byId('buyer-commit-shell'),
+  sellerRevealShell: byId('seller-reveal-shell'),
+  buyerRevealShell: byId('buyer-reveal-shell'),
+  finalizeShell: byId('finalize-shell'),
   testnetStatus: byId('testnet-status'),
-  createButton: byId('create-button'),
-  resetButton: byId('reset-button'),
-  contractDeposit: byId('contract-deposit'),
-  depositFill: byId('deposit-fill'),
-  deadlineStatus: byId('deadline-status'),
-  earlyFinalizeButton: byId('early-finalize-button'),
-  deadlineButton: byId('deadline-button'),
-  finalizeButton: byId('finalize-button'),
-  inlineMessage: byId('inline-message'),
-  resultShell: byId('result-shell'),
   activityLog: byId('activity-log'),
   evidenceSummary: byId('evidence-summary'),
   evidenceList: byId('evidence-list'),
@@ -244,37 +234,38 @@ elements.initContractButton.addEventListener('click', () => {
     testnet.startPlan = null
     testnet.bidPlan = null
     testnet.sellerDecision = null
+    testnet.transactions = []
+    trackVerifiedTransaction('创建容量窗口', verified.initialization)
     testnet.pending = null
     record(`Testnet 新实例 <${verified.initialization.address.index},${verified.initialization.address.subindex}> 已创建，并读回 view。`, 'chain')
     setTestnetStatus(formatInitializedStatus(verified.initialization, verified.view), 'success')
   })
 })
 
-for (const option of REAL_BID_OPTIONS) {
-  const button = option.id === 'buyer-a' ? elements.commitBidAButton : elements.commitBidBButton
-  button.addEventListener('click', () => {
-    runTestnetAction('commit_bid', async () => {
-      const connection = transactionConnection()
-      const plan = await prepareBidCommitment(connection, testnet.initialization, option.amountCcd)
-      saveBidRevealBackup(plan)
-      testnet.bidPlan = plan
-      const hash = await submitBidCommitment(connection, testnet.initialization, plan)
-      const sender = getTransactionSender(connection)
-      testnet.pending = { kind: 'commit_bid', hash, sender }
-      setTestnetStatus(`钱包已返回 ${option.label} 承诺交易哈希：${hash}\n正在等待 Testnet 最终确认。`, 'success')
-      const verified = await waitForContractUpdate(hash, 'surplus_bid.commit_bid', '2000000', {
-        sender,
-        bidder: plan.bidder,
-        commitment: plan.commitment,
-      })
-      testnet.view = verified.view
-      testnet.round = verified.round
-      testnet.pending = null
-      record(`${option.label} 已提交 2 CCD 报价承诺：${shortHash(hash)}。`, 'chain')
-      setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
+elements.commitBidButton.addEventListener('click', () => {
+  runTestnetAction('commit_bid', async () => {
+    const connection = transactionConnection()
+    const amountMicroCcd = parseCcdToMicroCcd(elements.bidAmountInput.value)
+    const plan = await prepareBidCommitment(connection, testnet.initialization, amountMicroCcd)
+    saveBidRevealBackup(plan)
+    testnet.bidPlan = plan
+    const hash = await submitBidCommitment(connection, testnet.initialization, plan)
+    const sender = getTransactionSender(connection)
+    testnet.pending = { kind: 'commit_bid', hash, sender }
+    setTestnetStatus(`钱包已返回隐藏报价承诺交易哈希：${hash}\n本次先锁定 2 CCD 保证金；报价金额会在揭示期前保持隐藏。`, 'success')
+    const verified = await waitForContractUpdate(hash, 'surplus_bid.commit_bid', '2000000', {
+      sender,
+      bidder: plan.bidder,
+      commitment: plan.commitment,
     })
+    testnet.view = verified.view
+    testnet.round = verified.round
+    testnet.pending = null
+    trackVerifiedTransaction('买家提交隐藏承诺', verified)
+    record(`买家 ${shortAccountAddress(plan.bidder)} 已提交隐藏报价承诺：${shortHash(hash)}。`, 'chain')
+    setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
   })
-}
+})
 
 elements.revealReserveButton.addEventListener('click', () => {
   runTestnetAction('reveal_reserve', async () => {
@@ -285,6 +276,7 @@ elements.revealReserveButton.addEventListener('click', () => {
     testnet.pending = { kind: 'reveal_reserve', hash, sender }
     const verified = await waitForContractUpdate(hash, 'surplus_bid.reveal_reserve', '0', { sender, reserveMicroCcd: plan.reserveMicroCcd })
     testnet.view = verified.view; testnet.round = verified.round; testnet.pending = null
+    trackVerifiedTransaction('卖家揭示底价', verified)
     record(`卖家已揭示底价：${shortHash(hash)}。`, 'chain')
     setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
   })
@@ -297,13 +289,14 @@ elements.revealBidButton.addEventListener('click', () => {
     const hash = await submitBidReveal(connection, testnet.initialization, plan)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'reveal_bid', hash, sender }
-    const topUp = String((plan.amountCcd - 2) * 1_000_000)
+    const topUp = (BigInt(plan.amountMicroCcd) - BigInt(START_ROUND_RULES.guaranteeCcd) * 1_000_000n).toString()
     const verified = await waitForContractUpdate(hash, 'surplus_bid.reveal_bid', topUp, {
       sender,
       bidder: plan.bidder,
       bidMicroCcd: plan.amountMicroCcd,
     })
     testnet.view = verified.view; testnet.round = verified.round; testnet.pending = null
+    trackVerifiedTransaction('买家揭示报价', verified)
     record(`买家已揭示报价：${shortHash(hash)}。`, 'chain')
     setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
   })
@@ -317,6 +310,7 @@ elements.finalizeChainButton.addEventListener('click', () => {
     testnet.pending = { kind: 'finalize', hash, sender }
     const verified = await waitForContractUpdate(hash, 'surplus_bid.finalize', '0', { sender, requireSettlement: true })
     testnet.view = verified.view; testnet.round = verified.round; testnet.pending = null
+    trackVerifiedTransaction('链上结算', verified)
     record(`链上结算已最终确认：${shortHash(hash)}。`, 'chain')
     setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
   })
@@ -344,7 +338,7 @@ elements.startRoundButton.addEventListener('click', () => {
     saveReserveRevealBackup(plan)
     testnet.startPlan = plan
     setTestnetStatus(
-      `Seller Agent 最终底价为 ${formatMicroCcd(plan.reserveMicroCcd)} CCD；已生成底价承诺，并将揭示所需的 32 字节盐保存在当前浏览器。\n接下来钱包将请求调用 start_round：锁定 2 CCD 测试保证金；提交期 ${START_ROUND_RULES.commitDurationMs / 60_000} 分钟，两个揭示期各 ${START_ROUND_RULES.sellerRevealDurationMs / 60_000} 分钟。`,
+      `Seller Agent 最终底价为 ${formatMicroCcd(plan.reserveMicroCcd)} CCD；已生成底价承诺，并将揭示所需的 32 字节盐保存在当前浏览器。\n接下来钱包将请求调用 start_round：锁定 2 CCD 测试保证金；承诺期 ${START_ROUND_RULES.commitDurationMs / 60_000} 分钟，卖家与买家共享 ${START_ROUND_RULES.revealDurationMs / 60_000} 分钟揭示期。`,
       'success',
     )
     const hash = await submitStartRound(connection, testnet.initialization, plan)
@@ -353,7 +347,9 @@ elements.startRoundButton.addEventListener('click', () => {
     setTestnetStatus(`钱包已返回 start_round 交易哈希：${hash}\n正在等待 Testnet 最终确认。`, 'success')
     const verified = await waitForFinalization('/api/testnet/verify-start-round', hash, { sender, plan: publicRoundPlan(plan) })
     testnet.round = verified.round
+    testnet.view = verified.view
     testnet.pending = null
+    trackVerifiedTransaction('开始隐藏报价轮次', verified)
     record(`Testnet 轮次已开始：${shortHash(hash)}；合约中锁定 2 CCD 卖家保证金。`, 'chain')
     setTestnetStatus(formatRoundStatus(verified.round, verified.view), 'success')
   })
@@ -369,6 +365,7 @@ elements.cancelRoundButton.addEventListener('click', () => {
     const verified = await waitForFinalization('/api/testnet/verify-cancel-round', hash, { sender })
     testnet.round = verified.round
     testnet.pending = null
+    trackVerifiedTransaction('取消并退款', verified)
     record(`过期空轮次已取消：${shortHash(hash)}；2 CCD 已退回实例卖家。`, 'chain')
     setTestnetStatus(`空轮次已取消，合约余额为 ${verified.view.contractBalance} CCD。\n${verified.round.explorerUrl}`, 'success')
   })
@@ -384,73 +381,6 @@ elements.backupReserveButton.addEventListener('click', () => {
   }
   render()
 })
-
-elements.createButton.addEventListener('click', () => {
-  auction = createDemoAuction()
-  activity = []
-  record('Seller Agent 提交底价承诺和 2 CCD 保证金；底价仍隐藏。')
-  setMessage('承诺期已开始。现在由两个 Buyer Agent 提交报价承诺。', 'success')
-  render()
-})
-
-elements.resetButton.addEventListener('click', () => {
-  auction = null
-  activity = []
-  setMessage('先创建拍卖并提交两份报价承诺。', 'neutral')
-  render()
-})
-
-for (const button of document.querySelectorAll('[data-bid-agent]')) {
-  button.addEventListener('click', () => {
-    const agent = DEMO_AGENTS.find((candidate) => candidate.id === button.dataset.bidAgent)
-    if (!agent || !auction) return
-    runAction(() => {
-      auction = commitDemoBid(auction, agent)
-      record(`${agent.name} 提交 SHA-256 报价承诺和 2 CCD 保证金；金额仍隐藏。`)
-      setMessage('承诺已记录。底价和报价要到各自揭示阶段才公开。', 'success')
-    })
-  })
-}
-
-elements.earlyFinalizeButton.addEventListener('click', () => {
-  if (!auction) return
-  runAction(() => {
-    finalizeDemoAuction(auction)
-  }, true)
-})
-
-elements.deadlineButton.addEventListener('click', () => {
-  if (!auction) return
-  runAction(() => {
-    auction = closeCommitAndReveal(auction)
-    record('承诺期结束：卖家先揭示底价 2 CCD。')
-    for (const agent of DEMO_AGENTS) auction = revealDemoBid(auction, agent)
-    record('买家揭示 4 CCD 与 6 CCD，并把托管金额补足到完整报价。')
-    auction = closeBuyerReveal(auction)
-    setMessage('买家揭示期结束，可以触发结算。', 'success')
-  })
-})
-
-elements.finalizeButton.addEventListener('click', () => {
-  if (!auction) return
-  runAction(() => {
-    auction = finalizeDemoAuction(auction)
-    record('确定性规则选出 Buyer Agent B，并完成目标资金分配预览。')
-    setMessage('结算完成。结果是本地规则预览，尚未发送 Testnet 交易。', 'success')
-  })
-})
-
-function runAction(action, expectedFailure = false) {
-  try {
-    action()
-    if (expectedFailure) setMessage('该失败路径没有按预期拒绝，需要检查。', 'error')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    setMessage(message, error instanceof DemoRuleError ? 'warning' : 'error')
-    record(`拒绝：${message}`, 'rejected')
-  }
-  render()
-}
 
 async function runTestnetAction(kind, action) {
   if (!walletConnection || testnet.busy) return
@@ -470,21 +400,20 @@ async function runTestnetAction(kind, action) {
 }
 
 function render() {
-  const created = auction !== null
-  const bidCount = auction?.bids.length ?? 0
-  const finalized = auction?.phase === 'Finalized' || auction?.phase === 'NoSale'
-  const commitOpen = auction?.phase === 'Commit'
-  const readyToFinalize = auction?.phase === 'ReadyToFinalize'
+  const livePhase = phaseName(testnet.view?.state?.phase)
+  const liveWindow = testnet.initialization?.address
 
-  elements.createButton.disabled = created && !finalized
-  elements.createButton.textContent = finalized ? '创建下一轮本地预览' : created ? '规则已固定' : '创建本地规则预览'
   elements.sellerDecisionButton.disabled = !runtime.agentApi || testnet.agentBusy || testnet.round !== null
   elements.sellerDecisionButton.textContent = !runtime.agentApi
     ? '真实评测结果已记录'
-    : testnet.agentBusy ? 'Seller Agent 决策中…' : testnet.sellerDecision ? '重新生成底价建议' : '生成下一轮底价建议'
-  elements.auctionPhase.textContent = auction?.phase ?? 'Draft'
-  elements.auctionId.textContent = auction?.id ?? '创建后生成'
-  elements.auctionDeadline.textContent = auction ? formatDate(auction.commitEnd) : '创建后生成'
+    : testnet.agentBusy ? 'Seller Agent 正在分析…' : testnet.sellerDecision ? '重新获取底价建议' : '获取底价建议'
+  elements.auctionPhase.textContent = livePhase ? phaseLabel(livePhase) : '等待发布'
+  elements.auctionId.textContent = liveWindow
+    ? `<${liveWindow.index},${liveWindow.subindex}>`
+    : '等待卖家发布'
+  elements.auctionDeadline.textContent = testnet.round?.commitEnd
+    ? formatDate(testnet.round.commitEnd)
+    : '发布后显示'
   if (!runtime.walletActions) {
     elements.walletButton.disabled = true
     elements.walletButton.textContent = '公开只读'
@@ -510,43 +439,8 @@ function render() {
     elements.walletAccountNotice.hidden = true
   }
   renderTestnet()
-  elements.deadlineStatus.textContent = readyToFinalize || finalized ? '揭示结束' : '承诺期'
-
-  for (const button of document.querySelectorAll('[data-bid-agent]')) {
-    const hasBid = auction?.bids.some((bid) => bid.agentId === button.dataset.bidAgent) ?? false
-    button.disabled = !created || !commitOpen || hasBid
-    button.textContent = hasBid ? '承诺已提交' : '提交承诺 + 2 CCD'
-    document.querySelector(`[data-agent-card="${button.dataset.bidAgent}"]`)?.classList.toggle('complete', hasBid)
-  }
-
-  const balanceMicro = contractBalanceMicro(auction)
-  elements.contractDeposit.textContent = `${formatCcd(balanceMicro)} CCD`
-  elements.depositFill.style.width = `${Math.min(Number(balanceMicro / 100_000n), 100)}%`
-
-  elements.earlyFinalizeButton.disabled = !created || finalized || readyToFinalize
-  elements.deadlineButton.disabled = !commitOpen || bidCount < 2
-  elements.finalizeButton.disabled = !readyToFinalize
-  elements.resultShell.hidden = auction?.phase !== 'Finalized'
-
-  if (auction?.phase === 'Finalized') {
-    const buyerA = auction.settlement.allocations.find((item) => item.agentId === 'buyer-a')
-    const buyerB = auction.settlement.allocations.find((item) => item.agentId === 'buyer-b')
-    const winner = auction.settlement.allocations.find((item) => item.won)
-    byId('winner-mark').textContent = winner.name.slice(-1)
-    byId('winner-name').textContent = winner.name
-    byId('winner-price').textContent = `成交价 ${formatCcd(winner.priceMicro)} CCD`
-    byId('result-reserve').textContent = `底价 ${formatCcd(auction.reserveMicro)}`
-    byId('result-surplus').textContent = `交易剩余 ${formatCcd(winner.surplusMicro)} CCD`
-    byId('result-bid').textContent = `报价 ${formatCcd(winner.amountMicro)}`
-    byId('buyer-a-refund').textContent = `${formatCcd(buyerA.refundMicro)} CCD`
-    byId('buyer-b-refund').textContent = `${formatCcd(buyerB.refundMicro)} CCD`
-    byId('seller-receives').textContent = `${formatCcd(auction.settlement.sellerReceivesMicro)} CCD`
-    byId('platform-receives').textContent = `${formatCcd(auction.settlement.platformReceivesMicro)} CCD`
-    byId('conservation').textContent = `12 = 4 + 1.8 + 3.8 + 0.4 + 2（卖家保证金退回）CCD`
-  }
-
-  updateProgress({ created, bidCount, readyToFinalize, finalized })
   renderActivity()
+  renderEvidencePanel()
 }
 
 function renderTestnet() {
@@ -554,16 +448,27 @@ function renderTestnet() {
     for (const button of [
       elements.deployModuleButton, elements.initContractButton, elements.readViewButton,
       elements.startRoundButton, elements.cancelRoundButton, elements.backupReserveButton,
-      elements.commitBidAButton, elements.commitBidBButton, elements.revealReserveButton,
+      elements.commitBidButton, elements.revealReserveButton,
       elements.revealBidButton, elements.finalizeChainButton,
     ]) button.disabled = true
-    elements.startRoundButton.textContent = '本地完整模式可开始轮次'
+    elements.bidAmountInput.disabled = true
+    elements.sellerAgentCard.hidden = true
+    elements.sellerPublishActions.hidden = true
+    elements.buyerCommitShell.hidden = true
+    elements.sellerRevealShell.hidden = true
+    elements.buyerRevealShell.hidden = true
+    elements.finalizeShell.hidden = true
+    elements.roleLabel.textContent = '观察者'
+    elements.roleStage.textContent = '公开只读'
+    elements.roleGuidance.textContent = '公开页面只展示已记录的 Testnet 证据；钱包交易仅在本地完整模式开放。'
+    elements.startRoundButton.textContent = '本地完整模式可发布容量窗口'
     elements.testnetStatus.textContent = '公开只读模式不会连接钱包或调用本地 API。下方真实 Testnet 记录可通过 CCDExplorer 独立核验。'
     return
   }
   const connected = walletConnection !== null
   const currentWalletAccount = walletConnection?.accounts?.[0] ?? null
   const hasStatus = testnet.status !== null
+  const hasCurrentContractArtifact = testnet.status?.contractReady === true
   const hasDeployment = testnet.deployment !== null
   const hasInitialization = testnet.initialization !== null
   const hasRound = testnet.round !== null
@@ -573,36 +478,130 @@ function renderTestnet() {
   const selectedBidPlan = testnet.bidPlan ?? (hasInitialization && currentWalletAccount ? loadBidRevealBackup(testnet.initialization, currentWalletAccount) : null)
   const selectedBidAlreadyRevealed = hasRevealedBid(testnet.view, currentWalletAccount)
   const commitOpen = phase === 'Commit' && Date.now() < Number(testnet.round?.commitEnd)
-  const sellerRevealOpen = phase === 'Commit' && Date.now() >= Number(testnet.round?.commitEnd) && Date.now() < Number(testnet.round?.sellerRevealEnd)
-  const buyerRevealOpen = phase === 'ReserveRevealed' && Date.now() >= Number(testnet.round?.sellerRevealEnd) && Date.now() < Number(testnet.round?.buyerRevealEnd)
-  const finalizeOpen = phase === 'ReserveRevealed' && Date.now() >= Number(testnet.round?.buyerRevealEnd)
+  const revealEnd = Number(testnet.round?.revealEnd)
+  const now = Date.now()
+  const revealOpen = ['Commit', 'Reveal'].includes(phase) && now >= Number(testnet.round?.commitEnd) && now < revealEnd
+  const reserveRevealed = optionValue(testnet.view?.state?.reserve) !== null
+  const finalizeOpen = phase === 'Reveal' && reserveRevealed && now >= revealEnd
   const terminal = ['NoSale', 'Settled', 'Cancelled'].includes(phase)
-  const canCancel = hasRound && testnet.round.phase === 'Commit' && Date.now() >= Number(testnet.round.commitEnd)
+  const bidCount = testnet.view?.state?.bids?.length ?? 0
+  const canCancel = hasRound && ['Commit', 'Reveal'].includes(phase) && (
+    (bidCount === 0 && now >= Number(testnet.round.commitEnd)) ||
+    (bidCount > 0 && !reserveRevealed && now >= revealEnd)
+  )
   const canCreateReplacement = !hasInitialization || terminal || canCancel
-  elements.deployModuleButton.disabled = !connected || !hasStatus || testnet.busy || hasDeployment || testnet.pending !== null
-  elements.initContractButton.disabled = !connected || !hasStatus || !hasDeployment || testnet.busy || !canCreateReplacement || testnet.pending !== null
+  const role = deriveAuctionRole({
+    account: currentWalletAccount,
+    initialization: testnet.initialization,
+    view: testnet.view,
+  })
+  elements.deployModuleButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || testnet.busy || hasDeployment || testnet.pending !== null
+  elements.initContractButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || !hasDeployment || testnet.busy || !canCreateReplacement || testnet.pending !== null
   elements.readViewButton.disabled = !connected || !hasInitialization || testnet.busy || testnet.pending !== null
   const decisionReady = testnet.sellerDecision !== null && testnet.sellerDecision.final.action !== 'needs_human'
-  elements.startRoundButton.disabled = !connected || !hasInitialization || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
+  elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
   elements.cancelRoundButton.disabled = !connected || !isInstanceSeller || !canCancel || testnet.busy || testnet.pending !== null
   elements.backupReserveButton.disabled = testnet.startPlan === null
-  elements.commitBidAButton.disabled = !connected || !commitOpen || isInstanceSeller || bidAddresses.has(currentWalletAccount) || testnet.busy || testnet.pending !== null
-  elements.commitBidBButton.disabled = !connected || !commitOpen || isInstanceSeller || bidAddresses.has(currentWalletAccount) || testnet.busy || testnet.pending !== null
-  elements.revealReserveButton.disabled = !connected || !sellerRevealOpen || !isInstanceSeller || !testnet.startPlan || testnet.busy || testnet.pending !== null
-  elements.revealBidButton.disabled = !connected || !buyerRevealOpen || !selectedBidPlan || selectedBidAlreadyRevealed || testnet.busy || testnet.pending !== null
+  const canCommitBid = connected && commitOpen && !isInstanceSeller && !bidAddresses.has(currentWalletAccount) && !testnet.busy && testnet.pending === null
+  elements.bidAmountInput.disabled = !canCommitBid
+  elements.commitBidButton.disabled = !canCommitBid
+  elements.revealReserveButton.disabled = !connected || !revealOpen || reserveRevealed || !isInstanceSeller || !testnet.startPlan || testnet.busy || testnet.pending !== null
+  elements.revealBidButton.disabled = !connected || !revealOpen || !selectedBidPlan || selectedBidAlreadyRevealed || testnet.busy || testnet.pending !== null
   elements.finalizeChainButton.disabled = !connected || !finalizeOpen || testnet.busy || testnet.pending !== null
+
+  elements.sellerAgentCard.hidden = !connected || (hasInitialization && role !== 'seller')
+  elements.sellerPublishActions.hidden = !connected || (hasInitialization && (!isInstanceSeller || (hasRound && !terminal && !canCancel)))
+  elements.buyerCommitShell.hidden = !(role === 'buyer' && commitOpen)
+  elements.sellerRevealShell.hidden = !(role === 'seller' && revealOpen && !reserveRevealed)
+  elements.buyerRevealShell.hidden = !(role === 'committedBuyer' && revealOpen && !selectedBidAlreadyRevealed)
+  elements.finalizeShell.hidden = !finalizeOpen
+  const stageLabel = revealOpen
+    ? '统一揭示期'
+    : finalizeOpen
+    ? '结算期'
+    : hasInitialization
+    ? phaseLabel(phase)
+    : '准备容量窗口'
+  renderRoleSummary({
+    connected,
+    role,
+    stageLabel,
+    hasInitialization,
+    hasRound,
+    commitOpen,
+    revealOpen,
+    finalizeOpen,
+    terminal,
+    revealEnd: testnet.round?.revealEnd,
+    reserveRevealed,
+  })
   if (testnet.busy) {
     const label = testnet.pending?.kind === 'init' ? '等待初始化确认…' : testnet.pending?.kind === 'deploy' ? '等待部署确认…' : '正在准备…'
     elements.deployModuleButton.textContent = label
   } else {
-    elements.deployModuleButton.textContent = hasDeployment ? '模块已部署' : '1. 部署模块'
+    elements.deployModuleButton.textContent = hasDeployment ? '合约模块已就绪' : '准备合约模块'
   }
   elements.initContractButton.textContent = canCancel
-    ? '创建隔离新实例（旧轮次已过期）'
-    : hasInitialization ? '创建下一 0 CCD 实例' : '2. 创建 0 CCD 实例'
-  elements.startRoundButton.textContent = hasRound ? '轮次已开始' : '4. 采用最终底价并开始轮次 · 锁定 2 CCD'
-  elements.cancelRoundButton.textContent = canCancel ? '取消过期空轮次并退款' : '过期后可取消并退款'
-  elements.revealBidButton.textContent = selectedBidAlreadyRevealed ? '当前买家已揭示报价' : '当前买家揭示报价'
+    ? '准备隔离新容量窗口（旧窗口已过期）'
+    : hasInitialization ? '准备下一容量窗口（0 CCD）' : '准备容量窗口（0 CCD）'
+  elements.startRoundButton.textContent = hasRound ? '容量窗口已发布' : '确认发布容量窗口 · 锁定 2 CCD'
+  elements.cancelRoundButton.textContent = canCancel ? '撤销过期空窗口并退款' : '过期后可撤销并退款'
+  const plannedBidLabel = selectedBidPlan ? `${formatMicroCcd(selectedBidPlan.amountMicroCcd)} CCD` : '我的'
+  elements.revealBidButton.textContent = selectedBidAlreadyRevealed ? '我的报价已揭示' : `揭示${plannedBidLabel}报价`
+  elements.commitBidButton.textContent = '提交我的隐藏报价 · 先锁定 2 CCD'
+  elements.revealReserveButton.textContent = '揭示卖家底价'
+  elements.finalizeChainButton.textContent = '按固定规则结算'
+}
+
+function renderRoleSummary({ connected, role, stageLabel, hasInitialization, hasRound, commitOpen, revealOpen, finalizeOpen, terminal, revealEnd, reserveRevealed }) {
+  if (!connected) {
+    elements.roleLabel.textContent = '观察者'
+    elements.roleStage.textContent = '等待连接钱包'
+    elements.roleGuidance.textContent = '连接钱包后，页面会依据当前账户与合约状态显示你现在可执行的操作。'
+    return
+  }
+
+  const roleLabel = {
+    sellerCandidate: '卖家候选',
+    seller: '卖家',
+    buyer: '买家',
+    committedBuyer: '已承诺买家',
+    observer: '观察者',
+  }[role] ?? '观察者'
+  elements.roleLabel.textContent = roleLabel
+  elements.roleStage.textContent = stageLabel
+
+  if (!hasInitialization) {
+    elements.roleGuidance.textContent = '当前尚无容量窗口。你可以作为卖家准备合约模块、创建实例，并在获得底价建议后发布。'
+  } else if (role === 'seller') {
+    elements.roleGuidance.textContent = !hasRound
+      ? '请获取 Seller Agent 的底价建议并确认发布；发布时会锁定 2 CCD 保证金。'
+      : revealOpen && !reserveRevealed
+      ? '承诺期已经结束。现在处于统一揭示期；请揭示此前承诺的卖家底价。'
+      : terminal
+      ? '该容量窗口已结束。你可以准备下一容量窗口，旧窗口的链上证据会被保留。'
+      : '当前无需卖家操作；请等待阶段推进，或通过链上状态了解已承诺的买家数量。'
+  } else if (role === 'buyer') {
+    elements.roleGuidance.textContent = commitOpen
+      ? '请输入你的最高愿付价格并提交隐藏报价。此时只锁定 2 CCD 保证金，报价金额不会公开。'
+      : terminal
+      ? '该容量窗口已结束；可在结算结果与 Explorer 中查看公开证据。'
+      : '当前不在买家承诺期，暂时没有可执行的买家操作。'
+  } else if (role === 'committedBuyer') {
+    elements.roleGuidance.textContent = revealOpen
+      ? reserveRevealed
+        ? `统一揭示期已开放，将在 ${formatDate(revealEnd)} 截止。卖家底价已公开；现在请揭示你的报价，系统将提示需要补足的 CCD。`
+        : `统一揭示期已开放，将在 ${formatDate(revealEnd)} 截止。现在可揭示你的报价；卖家底价尚未揭示不影响你提交。`
+      : finalizeOpen
+      ? '揭示期已结束，等待任意账户触发固定规则结算。'
+      : terminal
+      ? '本轮已经结束；查看你的链上结果和退款记录。'
+      : '你的隐藏报价承诺已记录。请妥善保留当前浏览器中的揭示凭证，并等待揭示期。'
+  } else if (finalizeOpen) {
+    elements.roleGuidance.textContent = '揭示期已结束。任何已连接账户都可以触发一次固定规则结算。'
+  } else {
+    elements.roleGuidance.textContent = '当前账户没有可执行的交易操作，可继续观察链上阶段与公开证据。'
+  }
 }
 
 async function refreshTestnetStatus() {
@@ -686,8 +685,8 @@ function formatInitializedStatus(initialization, view) {
   const address = `<${initialization.address.index},${initialization.address.subindex}>`
   const phase = Object.keys(view.state.phase ?? {}).join('') || JSON.stringify(view.state.phase)
   return [
-    `0 CCD 实例 ${address} 已最终确认。`,
-    `view phase: ${phase}; contract balance: ${view.contractBalance} CCD`,
+    `容量窗口 ${address} 已创建并最终确认；初始化未存入业务资金（0 CCD）。`,
+    `链上阶段：${phase}；合约余额：${view.contractBalance} CCD`,
     initialization.contractUrl,
   ].join('\n')
 }
@@ -695,9 +694,9 @@ function formatInitializedStatus(initialization, view) {
 function formatRoundStatus(round, view) {
   const phase = Object.keys(view.state.phase ?? {}).join('') || JSON.stringify(view.state.phase)
   return [
-    `round ${round.roundId} 已最终确认：phase ${phase}。`,
-    `合约余额: ${view.contractBalance} CCD；提交截止: ${formatDate(round.commitEnd)}`,
-    `卖家揭示截止: ${formatDate(round.sellerRevealEnd)}；买家揭示截止: ${formatDate(round.buyerRevealEnd)}`,
+    `容量窗口第 ${round.roundId} 轮已最终确认：链上阶段 ${phase}。`,
+    `合约余额：${view.contractBalance} CCD；承诺截止：${formatDate(round.commitEnd)}`,
+    `统一揭示截止：${formatDate(round.revealEnd)}`,
     round.explorerUrl,
   ].join('\n')
 }
@@ -714,21 +713,42 @@ function phaseName(value) {
   return ''
 }
 
+function optionValue(value) {
+  if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'Some')) {
+    return value.Some
+  }
+  return null
+}
+
+function phaseLabel(phase) {
+  return {
+    Idle: '等待发布',
+    Commit: '承诺期开放',
+    Reveal: '揭示期开放',
+    Settled: '已结算',
+    NoSale: '未成交',
+    Cancelled: '已取消',
+  }[phase] ?? phase
+}
+
 function formatStatusSummary(status) {
+  if (status.contractReady !== true) {
+    return `当前不能发起钱包交易：${status.contractIssue ?? 'Wasm/schema 尚未通过当前协议的构建核验。'}`
+  }
   const instance = status.initialization
-    ? `当前技术验证实例：<${status.initialization.address.index},${status.initialization.address.subindex}>。`
-    : '尚无已核验实例。'
+    ? `当前容量窗口：<${status.initialization.address.index},${status.initialization.address.subindex}>。`
+    : '尚无已核验的容量窗口。'
   const terminalRound = ['NoSale', 'Settled', 'Cancelled'].includes(status.round?.phase)
   const hasCommitEnd = status.round?.commitEnd !== null && status.round?.commitEnd !== undefined && Number.isFinite(Number(status.round.commitEnd)) && Number(status.round.commitEnd) > 0
   const action = status.round && terminalRound
-    ? `链上第 1 轮已处于 ${status.round.phase} 终态；可创建下一 0 CCD 实例。`
+    ? `当前容量窗口已处于 ${status.round.phase} 终态；卖家可准备下一容量窗口（初始化金额为 0 CCD，网络费另计）。`
     : status.round && hasCommitEnd
-    ? `链上已存在第 1 轮（${status.round.phase}），不会再发送 start_round。提交截止：${formatDate(status.round.commitEnd)}。`
+    ? `当前容量窗口已进入 ${status.round.phase}；不会重复发布。承诺截止：${formatDate(status.round.commitEnd)}。`
     : status.round
-    ? `链上已存在第 1 轮（${status.round.phase}），但公共节点未返回有效提交截止时间；请先读回 view，页面不会发送 start_round。`
+    ? `当前容量窗口已进入 ${status.round.phase}，但公共节点未返回有效承诺截止；请刷新链上状态，页面不会重复发布。`
     : status.initialization
-    ? `要开始该实例的轮次，钱包必须切换到其初始化签名账户 ${shortAccountAddress(status.initialization.sender)}。`
-    : '下一步可由已连接账户请求部署。'
+    ? `请切换到创建该容量窗口的卖家账户 ${shortAccountAddress(status.initialization.sender)}，再确认发布。`
+    : '下一步：由已连接的卖家准备合约模块并创建容量窗口。'
   return `公共节点已确认 Concordium Testnet。\n当前 Wasm module ref: ${status.moduleReference}\n${instance}\n${action}`
 }
 
@@ -753,22 +773,26 @@ function wait(milliseconds) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
 }
 
-function updateProgress({ created, bidCount, readyToFinalize, finalized }) {
-  document.querySelector('[data-progress="create"]')?.classList.toggle('active', created)
-  document.querySelector('[data-progress="bid"]')?.classList.toggle('active', bidCount === 2)
-  document.querySelector('[data-progress="settle"]')?.classList.toggle('active', readyToFinalize || finalized)
-  document.querySelector('[data-progress="evidence"]')?.classList.toggle('active', finalized)
-}
-
 function record(message, status = 'placeholder') {
   activity.unshift({ time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), message, status })
+}
+
+function trackVerifiedTransaction(label, transaction) {
+  if (!transaction?.hash || !transaction?.explorerUrl) return
+  if (testnet.transactions.some((item) => item.hash === transaction.hash)) return
+  testnet.transactions.push({
+    label,
+    hash: transaction.hash,
+    explorerUrl: transaction.explorerUrl,
+    confirmedAt: Date.now(),
+  })
 }
 
 function renderActivity() {
   elements.activityLog.replaceChildren()
   const entries = activity.length
     ? activity
-    : [{ time: '等待', message: '创建演示拍卖后，步骤会在这里串起来。', status: 'placeholder' }]
+    : [{ time: '等待', message: '连接钱包后，链上操作会在这里按时间记录。', status: 'placeholder' }]
 
   for (const entry of entries) {
     const item = document.createElement('li')
@@ -784,8 +808,7 @@ function renderActivity() {
 }
 
 function setMessage(message, tone) {
-  elements.inlineMessage.textContent = message
-  elements.inlineMessage.dataset.tone = tone
+  setTestnetStatus(message, tone)
 }
 
 async function loadEvidence() {
@@ -797,8 +820,8 @@ async function loadEvidence() {
       signal: controller.signal,
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const evidence = await response.json()
-    renderEvidence(evidence)
+    historicalEvidence = await response.json()
+    renderEvidencePanel()
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     elements.evidenceSummary.textContent = `证据读取失败：${detail}`
@@ -808,11 +831,35 @@ async function loadEvidence() {
   }
 }
 
-function renderEvidence(evidence) {
+function renderEvidencePanel() {
+  if (runtime.walletActions && testnet.initialization) {
+    renderCurrentSessionEvidence()
+    return
+  }
+  if (historicalEvidence) renderHistoricalEvidence(historicalEvidence)
+}
+
+function renderCurrentSessionEvidence() {
+  const initialization = testnet.initialization
+  const address = `<${initialization.address.index},${initialization.address.subindex}>`
+  const phase = phaseName(testnet.view?.state?.phase) || '未读回'
+  const balance = testnet.view?.contractBalance ? `${testnet.view.contractBalance} CCD` : '未读回'
+  elements.evidenceSummary.dataset.tone = 'success'
+  elements.evidenceSummary.textContent = `本地完整模式 · 当前实例 ${address} · 本会话已核验 ${testnet.transactions.length} 笔交易 · 链上阶段 ${phase} · 合约余额 ${balance}`
+  renderEvidenceRows(testnet.transactions, '本地确认时间')
+  if (testnet.transactions.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'evidence-empty'
+    empty.textContent = '当前实例尚没有本会话最终确认的交易记录。完成初始化或后续链上操作后，核验记录会出现在这里。'
+    elements.evidenceList.append(empty)
+  }
+}
+
+function renderHistoricalEvidence(evidence) {
   const round = evidence.currentCoreRound
   const address = `<${round.instance.address.index},${round.instance.address.subindex}>`
-  elements.evidenceSummary.textContent = `${evidence.network} · 合约 ${address} · ${round.finalView.phase} · 成交价 ${formatMicroCcd(round.finalView.allocation.priceMicroCcd)} CCD · 合约余额 ${formatMicroCcd(round.finalView.contractBalanceMicroCcd)} CCD`
-  elements.evidenceList.replaceChildren()
+  elements.evidenceSummary.dataset.tone = 'neutral'
+  elements.evidenceSummary.textContent = `历史 Testnet 证据（旧顺序揭示协议）· 合约 ${address} · ${round.finalView.phase} · 成交价 ${formatMicroCcd(round.finalView.allocation.priceMicroCcd)} CCD · 合约余额 ${formatMicroCcd(round.finalView.contractBalanceMicroCcd)} CCD`
 
   const labels = new Map([
     ['initialization', '创建拍卖实例'],
@@ -824,18 +871,32 @@ function renderEvidence(evidence) {
     ['finalize', '链上结算'],
   ])
 
-  for (const [step, item] of Object.entries(round.transactions)) {
+  const rows = Object.entries(round.transactions).map(([step, item]) => ({
+    label: labels.get(step) ?? step,
+    hash: item.hash,
+    explorerUrl: item.explorerUrl,
+    confirmedAt: null,
+  }))
+  renderEvidenceRows(rows, '历史快照')
+}
+
+function renderEvidenceRows(rows, timeLabel) {
+  elements.evidenceList.replaceChildren()
+  for (const item of rows) {
     const row = document.createElement('a')
     row.href = item.explorerUrl
     row.target = '_blank'
     row.rel = 'noreferrer'
     const label = document.createElement('span')
     const hash = document.createElement('code')
+    const time = document.createElement('time')
     const status = document.createElement('strong')
-    label.textContent = labels.get(step) ?? step
+    label.textContent = item.label
     hash.textContent = `${item.hash.slice(0, 10)}…${item.hash.slice(-6)}`
+    time.textContent = item.confirmedAt ? formatDate(item.confirmedAt) : timeLabel
+    time.title = item.confirmedAt ? `${timeLabel}：${formatDate(item.confirmedAt)}` : timeLabel
     status.textContent = 'Finalized ↗'
-    row.append(label, hash, status)
+    row.append(label, hash, time, status)
     elements.evidenceList.append(row)
   }
 }

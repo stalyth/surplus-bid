@@ -11,8 +11,10 @@ import {
   assertTransactionHash,
   assertConcordiumTestnet,
   connectConcordiumWallet,
+  deriveAuctionRole,
   getTransactionSender,
   hasRevealedBid,
+  parseCcdToMicroCcd,
   prepareStartRound,
   prepareBidCommitment,
   selectWalletAccount,
@@ -59,6 +61,14 @@ test('rejects a missing wallet transaction hash before Testnet verification', ()
 
 test('compares a zero-CCD initialization amount as the SDK decimal value', () => {
   assert.equal(sdk.CcdAmount.toMicroCcd(sdk.CcdAmount.fromCcd(0)).toFixed(0), '0')
+})
+
+test('parses a buyer-entered CCD amount exactly to microCCD', () => {
+  assert.equal(parseCcdToMicroCcd('2'), '2000000')
+  assert.equal(parseCcdToMicroCcd('2.25'), '2250000')
+  assert.equal(parseCcdToMicroCcd('2.000001'), '2000001')
+  assert.throws(() => parseCcdToMicroCcd('2.0000001'), (error) => error instanceof ConcordiumClientError && error.code === 'INVALID_CCD_AMOUNT')
+  assert.throws(() => parseCcdToMicroCcd('-2'), (error) => error instanceof ConcordiumClientError && error.code === 'INVALID_CCD_AMOUNT')
 })
 
 test('an explicit connect lists authorized accounts even when the recent account is older', async () => {
@@ -146,6 +156,20 @@ test('detects whether the selected buyer has already revealed on chain', () => {
   assert.equal(hasRevealedBid(view, buyerB), false)
 })
 
+test('derives seller, buyer, and committed buyer roles from on-chain state', () => {
+  const seller = INSTANCE.sender
+  const buyer = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
+  const otherBuyer = '4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb'
+  const initialization = { ...INSTANCE, sender: seller }
+  const view = { state: { bids: [{ bidder: buyer }] } }
+
+  assert.equal(deriveAuctionRole({ account: seller, initialization, view }), 'seller')
+  assert.equal(deriveAuctionRole({ account: buyer, initialization, view }), 'committedBuyer')
+  assert.equal(deriveAuctionRole({ account: otherBuyer, initialization, view }), 'buyer')
+  assert.equal(deriveAuctionRole({ account: null, initialization, view }), 'observer')
+  assert.equal(deriveAuctionRole({ account: otherBuyer, initialization: null, view: null }), 'sellerCandidate')
+})
+
 test('keeps the transaction sender available after the global wallet connection disconnects', () => {
   const submittedConnection = { accounts: [INSTANCE.sender] }
   let activeConnection = submittedConnection
@@ -155,7 +179,7 @@ test('keeps the transaction sender available after the global wallet connection 
   assert.equal(getTransactionSender(submittedConnection), INSTANCE.sender)
 })
 
-test('prepares a seller-bound start_round with the fixed 20 + 5 + 5 minute windows', async () => {
+test('prepares a seller-bound start_round with fixed 8 + 5 minute windows', async () => {
   const originalWindow = globalThis.window
   globalThis.window = { concordiumSDK: sdk }
   try {
@@ -163,9 +187,8 @@ test('prepares a seller-bound start_round with the fixed 20 + 5 + 5 minute windo
     assert.equal(plan.seller, INSTANCE.sender)
     assert.equal(plan.reserveSaltHex.length, 64)
     assert.equal(plan.parameters.reserve_commitment.length, 32)
-    assert.equal(plan.parameters.commit_end, '1790001200000')
-    assert.equal(plan.parameters.seller_reveal_end, '1790001500000')
-    assert.equal(plan.parameters.buyer_reveal_end, '1790001800000')
+    assert.equal(plan.parameters.commit_end, '1790000480000')
+    assert.equal(plan.parameters.reveal_end, '1790000780000')
     assert.equal(plan.parameters.max_bids, START_ROUND_RULES.maxBids)
   } finally {
     globalThis.window = originalWindow
@@ -200,14 +223,14 @@ test('rejects start_round before any wallet request when the selected account is
   }
 })
 
-test('prepares a 4 CCD bid commitment with a distinct buyer and a 32-byte reveal salt', async () => {
+test('prepares a buyer-entered decimal bid commitment with a distinct buyer and a 32-byte reveal salt', async () => {
   const originalWindow = globalThis.window
   globalThis.window = { concordiumSDK: sdk }
   try {
     const buyer = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
-    const plan = await prepareBidCommitment({ accounts: [buyer] }, INSTANCE, 4)
+    const plan = await prepareBidCommitment({ accounts: [buyer] }, INSTANCE, parseCcdToMicroCcd('4.25'))
     assert.equal(plan.bidder, buyer)
-    assert.equal(plan.amountMicroCcd, '4000000')
+    assert.equal(plan.amountMicroCcd, '4250000')
     assert.equal(plan.saltHex.length, 64)
     assert.equal(plan.commitment.length, 32)
   } finally {
@@ -220,7 +243,7 @@ test('rejects a seller attempting to prepare a buyer commitment', async () => {
   globalThis.window = { concordiumSDK: sdk }
   try {
     await assert.rejects(
-      () => prepareBidCommitment({ accounts: [INSTANCE.sender] }, INSTANCE, 4),
+      () => prepareBidCommitment({ accounts: [INSTANCE.sender] }, INSTANCE, '4000000'),
       (error) => error instanceof ConcordiumClientError && error.code === 'SELLER_CANNOT_BID',
     )
   } finally {
