@@ -179,7 +179,7 @@ test('keeps the transaction sender available after the global wallet connection 
   assert.equal(getTransactionSender(submittedConnection), INSTANCE.sender)
 })
 
-test('prepares a seller-bound start_round with fixed 8 + 5 minute windows', async () => {
+test('prepares a seller-bound start_round with fixed 3 + 3 minute windows', async () => {
   const originalWindow = globalThis.window
   globalThis.window = { concordiumSDK: sdk }
   try {
@@ -187,8 +187,8 @@ test('prepares a seller-bound start_round with fixed 8 + 5 minute windows', asyn
     assert.equal(plan.seller, INSTANCE.sender)
     assert.equal(plan.reserveSaltHex.length, 64)
     assert.equal(plan.parameters.reserve_commitment.length, 32)
-    assert.equal(plan.parameters.commit_end, '1790000480000')
-    assert.equal(plan.parameters.reveal_end, '1790000780000')
+    assert.equal(plan.parameters.commit_end, '1790000180000')
+    assert.equal(plan.parameters.reveal_end, '1790000360000')
     assert.equal(plan.parameters.max_bids, START_ROUND_RULES.maxBids)
   } finally {
     globalThis.window = originalWindow

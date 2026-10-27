@@ -73,6 +73,12 @@ const elements = {
   roleLabel: byId('role-label'),
   roleStage: byId('role-stage'),
   roleGuidance: byId('role-guidance'),
+  roundProgress: byId('round-progress'),
+  roundProgressStatus: byId('round-progress-status'),
+  progressInstanceDetail: byId('progress-instance-detail'),
+  progressCommitDetail: byId('progress-commit-detail'),
+  progressRevealDetail: byId('progress-reveal-detail'),
+  progressSettlementDetail: byId('progress-settlement-detail'),
   sellerPublishActions: byId('seller-publish-actions'),
   buyerCommitShell: byId('buyer-commit-shell'),
   sellerRevealShell: byId('seller-reveal-shell'),
@@ -443,7 +449,56 @@ function render() {
   renderEvidencePanel()
 }
 
+function renderRoundProgress() {
+  const initialization = testnet.initialization
+  const round = testnet.round
+  const phase = phaseName(testnet.view?.state?.phase)
+  const terminal = ['Settled', 'NoSale', 'Cancelled'].includes(phase)
+  const now = Date.now()
+  const commitWindowOpen = Boolean(round && phase === 'Commit' && now < Number(round.commitEnd))
+  const revealWindowOpen = Boolean(round && ['Commit', 'Reveal'].includes(phase) && now >= Number(round.commitEnd) && now < Number(round.revealEnd))
+  const closeWindowOpen = Boolean(round && !terminal && now >= Number(round.revealEnd))
+  const statusByStep = new Map([
+    ['instance', initialization ? 'complete' : 'active'],
+    ['commit', !round ? 'pending' : commitWindowOpen ? 'active' : 'complete'],
+    ['reveal', !round ? 'pending' : revealWindowOpen ? 'active' : terminal || closeWindowOpen ? 'complete' : 'pending'],
+    ['settlement', terminal ? 'terminal' : closeWindowOpen ? 'active' : 'pending'],
+  ])
+  for (const step of elements.roundProgress.querySelectorAll('[data-progress-step]')) {
+    step.dataset.state = statusByStep.get(step.dataset.progressStep) ?? 'pending'
+  }
+
+  elements.progressInstanceDetail.textContent = initialization
+    ? `实例 <${initialization.address.index},${initialization.address.subindex}> 已确认`
+    : '卖家创建 0 CCD 实例'
+  elements.progressCommitDetail.textContent = round?.commitEnd
+    ? `截止：${formatDate(round.commitEnd)}`
+    : '发布轮次后写入链上'
+  elements.progressRevealDetail.textContent = round?.revealEnd
+    ? `截止：${formatDate(round.revealEnd)}`
+    : '承诺期结束后开放'
+  elements.progressSettlementDetail.textContent = phase === 'Settled'
+    ? '已结算，合约余额应为 0 CCD'
+    : phase === 'NoSale'
+    ? '未成交，退款已处理'
+    : phase === 'Cancelled'
+    ? '已取消，退款已处理'
+    : '揭示期结束后开放'
+  elements.roundProgressStatus.textContent = terminal
+    ? phaseLabel(phase)
+    : closeWindowOpen
+    ? '等待结算或超时处理'
+    : revealWindowOpen
+    ? '统一揭示期进行中'
+    : commitWindowOpen
+    ? '承诺期进行中'
+    : initialization
+    ? '等待卖家发布'
+    : '等待实例'
+}
+
 function renderTestnet() {
+  renderRoundProgress()
   if (!runtime.walletActions) {
     for (const button of [
       elements.deployModuleButton, elements.initContractButton, elements.readViewButton,
@@ -496,7 +551,11 @@ function renderTestnet() {
     view: testnet.view,
   })
   elements.deployModuleButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || testnet.busy || hasDeployment || testnet.pending !== null
-  elements.initContractButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || !hasDeployment || testnet.busy || !canCreateReplacement || testnet.pending !== null
+  // A module reference is global on Testnet. A dev-server restart must not force
+  // the seller to deploy the identical Wasm again before creating another instance.
+  // If this artifact has never been deployed, the initialization itself will be
+  // rejected by the chain with its actual reason.
+  elements.initContractButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || testnet.busy || !canCreateReplacement || testnet.pending !== null
   elements.readViewButton.disabled = !connected || !hasInitialization || testnet.busy || testnet.pending !== null
   const decisionReady = testnet.sellerDecision !== null && testnet.sellerDecision.final.action !== 'needs_human'
   elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
@@ -539,7 +598,7 @@ function renderTestnet() {
     const label = testnet.pending?.kind === 'init' ? '等待初始化确认…' : testnet.pending?.kind === 'deploy' ? '等待部署确认…' : '正在准备…'
     elements.deployModuleButton.textContent = label
   } else {
-    elements.deployModuleButton.textContent = hasDeployment ? '合约模块已就绪' : '准备合约模块'
+    elements.deployModuleButton.textContent = hasDeployment ? '合约模块已就绪' : '首次部署合约模块'
   }
   elements.initContractButton.textContent = canCancel
     ? '准备隔离新容量窗口（旧窗口已过期）'
@@ -748,7 +807,7 @@ function formatStatusSummary(status) {
     ? `当前容量窗口已进入 ${status.round.phase}，但公共节点未返回有效承诺截止；请刷新链上状态，页面不会重复发布。`
     : status.initialization
     ? `请切换到创建该容量窗口的卖家账户 ${shortAccountAddress(status.initialization.sender)}，再确认发布。`
-    : '下一步：由已连接的卖家准备合约模块并创建容量窗口。'
+    : '下一步：由已连接的卖家直接创建 0 CCD 容量窗口；只有当前 Wasm 从未部署到 Testnet 时才需要先部署模块。'
   return `公共节点已确认 Concordium Testnet。\n当前 Wasm module ref: ${status.moduleReference}\n${instance}\n${action}`
 }
 
@@ -774,18 +833,65 @@ function wait(milliseconds) {
 }
 
 function record(message, status = 'placeholder') {
-  activity.unshift({ time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), message, status })
+  const entry = { at: new Date().toISOString(), time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), message, status }
+  activity.unshift(entry)
+  persistLocalSession('/api/session/activity', { message, status })
 }
 
 function trackVerifiedTransaction(label, transaction) {
   if (!transaction?.hash || !transaction?.explorerUrl) return
   if (testnet.transactions.some((item) => item.hash === transaction.hash)) return
+  const instance = testnet.initialization?.address
+  if (!instance) return
   testnet.transactions.push({
     label,
     hash: transaction.hash,
     explorerUrl: transaction.explorerUrl,
     confirmedAt: Date.now(),
+    instance,
   })
+  persistLocalSession('/api/session/evidence', {
+    label,
+    hash: transaction.hash,
+    explorerUrl: transaction.explorerUrl,
+    instance,
+  })
+}
+
+function persistLocalSession(path, body) {
+  if (!runtime.walletActions) return
+  void fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  }).then((response) => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  }).catch((error) => {
+    console.error(`Could not persist local session data at ${path}:`, error)
+  })
+}
+
+async function loadLocalSessionHistory() {
+  if (!runtime.walletActions) return
+  try {
+    const history = await requestJson('/api/session/history')
+    const entries = Array.isArray(history.entries) ? history.entries : []
+    activity = entries.filter((entry) => entry.kind === 'activity').map((entry) => ({
+      ...entry,
+      time: formatLocalTime(entry.at),
+    }))
+    testnet.transactions = entries.filter((entry) => entry.kind === 'evidence').map((entry) => ({
+      label: entry.label,
+      hash: entry.hash,
+      explorerUrl: entry.explorerUrl,
+      confirmedAt: entry.at,
+      instance: entry.instance,
+    }))
+    render()
+  } catch (error) {
+    console.error('Could not restore local session history:', error)
+  }
 }
 
 function renderActivity() {
@@ -842,17 +948,22 @@ function renderEvidencePanel() {
 function renderCurrentSessionEvidence() {
   const initialization = testnet.initialization
   const address = `<${initialization.address.index},${initialization.address.subindex}>`
+  const entries = testnet.transactions.filter((item) => sameInstance(item.instance, initialization.address))
   const phase = phaseName(testnet.view?.state?.phase) || '未读回'
   const balance = testnet.view?.contractBalance ? `${testnet.view.contractBalance} CCD` : '未读回'
   elements.evidenceSummary.dataset.tone = 'success'
-  elements.evidenceSummary.textContent = `本地完整模式 · 当前实例 ${address} · 本会话已核验 ${testnet.transactions.length} 笔交易 · 链上阶段 ${phase} · 合约余额 ${balance}`
-  renderEvidenceRows(testnet.transactions, '本地确认时间')
-  if (testnet.transactions.length === 0) {
+  elements.evidenceSummary.textContent = `本地完整模式 · 当前实例 ${address} · 本会话已核验 ${entries.length} 笔交易 · 链上阶段 ${phase} · 合约余额 ${balance}`
+  renderEvidenceRows(entries, '本地确认时间')
+  if (entries.length === 0) {
     const empty = document.createElement('p')
     empty.className = 'evidence-empty'
     empty.textContent = '当前实例尚没有本会话最终确认的交易记录。完成初始化或后续链上操作后，核验记录会出现在这里。'
     elements.evidenceList.append(empty)
   }
+}
+
+function sameInstance(left, right) {
+  return left && right && String(left.index) === String(right.index) && String(left.subindex) === String(right.subindex)
 }
 
 function renderHistoricalEvidence(evidence) {
@@ -961,6 +1072,12 @@ function formatDate(value) {
   }).format(date)
 }
 
+function formatLocalTime(value) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '未知时间'
+  return date.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
 function formatMicroCcd(value) {
   return formatCcd(BigInt(value))
 }
@@ -973,5 +1090,6 @@ function byId(id) {
 
 renderRuntimeMode()
 render()
+void loadLocalSessionHistory()
 loadEvidence()
 loadAgentEvaluation()

@@ -68,7 +68,7 @@
             <dl class="rule-grid">
               <div><dt>卖家底价</dt><dd>承诺期隐藏</dd></div>
               <div><dt>容量</dt><dd>1</dd></div>
-              <div><dt>阶段时长</dt><dd>8 + 5 分钟</dd></div>
+              <div><dt>阶段时长</dt><dd>3 + 3 分钟</dd></div>
               <div><dt>最多报价</dt><dd>2</dd></div>
             </dl>
 
@@ -98,14 +98,34 @@
             <div class="testnet-check" aria-labelledby="testnet-check-title">
               <div class="panel-kicker"><span>02</span> Testnet 交易工作台</div>
               <h4 id="testnet-check-title">当前账户的链上操作</h4>
-              <p>系统根据钱包账户、合约阶段和已提交承诺显示当前可执行操作。承诺期结束后，卖家与买家共享同一个 5 分钟揭示期。底价盐与报价盐只保存在当前浏览器；请妥善保存揭示备份。</p>
+              <p>系统根据钱包账户、合约阶段和已提交承诺显示当前可执行操作。承诺期结束后，卖家与买家共享同一个 3 分钟揭示期。底价盐与报价盐只保存在当前浏览器；请妥善保存揭示备份。</p>
               <section class="role-summary" id="role-summary" aria-live="polite">
                 <div><span>当前身份</span><strong id="role-label">观察者</strong></div>
                 <div><span>链上阶段</span><strong id="role-stage">等待连接钱包</strong></div>
                 <p id="role-guidance">连接钱包后，页面会依据合约状态显示你现在可执行的操作。</p>
               </section>
+              <section class="round-progress" id="round-progress" aria-labelledby="round-progress-title">
+                <div class="round-progress-heading">
+                  <span id="round-progress-title">本轮链上进度</span>
+                  <strong id="round-progress-status">等待实例</strong>
+                </div>
+                <ol>
+                  <li data-progress-step="instance" data-state="pending">
+                    <span>1</span><div><strong>创建实例</strong><small id="progress-instance-detail">卖家创建 0 CCD 实例</small></div>
+                  </li>
+                  <li data-progress-step="commit" data-state="pending">
+                    <span>2</span><div><strong>承诺期</strong><small id="progress-commit-detail">发布轮次后写入截止时间</small></div>
+                  </li>
+                  <li data-progress-step="reveal" data-state="pending">
+                    <span>3</span><div><strong>统一揭示期</strong><small id="progress-reveal-detail">承诺期结束后开放</small></div>
+                  </li>
+                  <li data-progress-step="settlement" data-state="pending">
+                    <span>4</span><div><strong>链上结算</strong><small id="progress-settlement-detail">揭示期结束后开放</small></div>
+                  </li>
+                </ol>
+              </section>
               <div class="action-row" id="seller-publish-actions">
-                <button class="button button-ghost" id="deploy-module-button" type="button" disabled>准备合约模块</button>
+                <button class="button button-ghost" id="deploy-module-button" type="button" disabled>首次部署合约模块</button>
                 <button class="button button-secondary" id="init-contract-button" type="button" disabled>准备新容量窗口</button>
                 <button class="button button-primary" id="start-round-button" type="button" disabled>确认发布容量窗口 · 锁定 2 CCD</button>
                 <button class="button button-ghost" id="backup-reserve-button" type="button" disabled>下载底价揭示备份</button>
@@ -130,7 +150,7 @@
               <div class="action-row" id="finalize-shell" aria-label="结算本轮">
                 <button class="button button-primary" id="finalize-chain-button" type="button" disabled>按固定规则结算</button>
               </div>
-              <p class="todo">页面仅在链上阶段与当前交易账户匹配时开放动作。买家报价盐和卖家底价盐只保存在当前浏览器；丢失后可能无法揭示。</p>
+              <p class="todo">模块引用在 Testnet 全局复用：重启本地服务后可直接创建新的 0 CCD 容量窗口，无须重复部署相同 Wasm。页面仅在链上阶段与当前交易账户匹配时开放动作。买家报价盐和卖家底价盐只保存在当前浏览器；丢失后可能无法揭示。</p>
             </div>
           </article>
 

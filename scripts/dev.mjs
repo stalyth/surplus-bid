@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { createReadStream, readFileSync, statSync } from 'node:fs'
+import { createReadStream, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,6 +28,7 @@ const testnetGenesis = '4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e8
 const contractName = ContractName.fromString('surplus_bid')
 const platformAddress = '4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4'
 const protocolVersion = 'shared-reveal-v2'
+const sessionHistoryPath = resolve(repoRoot, 'runtime', 'session-activity.json')
 const testnetClient = new ConcordiumGRPCNodeClient(
   'grpc.testnet.concordium.com', 20_000, credentials.createSsl(), { timeout: 10_000 },
 )
@@ -69,6 +70,10 @@ const server = createServer(async (request, response) => {
       const body = await readJson(request)
       const decision = await decideNextReserve(body.taskId, body.input)
       sendJson(response, 200, { ok: true, decision })
+      return
+    }
+    if (url.pathname.startsWith('/api/session/')) {
+      await handleSessionApi(request, response, url)
       return
     }
     if (url.pathname.startsWith('/api/testnet/')) {
@@ -128,6 +133,77 @@ server.on('error', (error) => {
 server.listen(port, host, () => console.log(`SurplusBid walking skeleton: http://${host}:${port}`))
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)))
 
+async function handleSessionApi(request, response, url) {
+  if (request.method === 'GET' && url.pathname === '/api/session/history') {
+    sendJson(response, 200, { ok: true, ...readSessionHistory() })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/session/activity') {
+    const entry = validateActivityEntry(await readJson(request))
+    const history = readSessionHistory()
+    history.entries.unshift({ kind: 'activity', ...entry })
+    history.entries = history.entries.slice(0, 10)
+    writeSessionHistory(history)
+    sendJson(response, 200, { ok: true, count: history.entries.length })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/session/evidence') {
+    const entry = validateEvidenceEntry(await readJson(request))
+    const history = readSessionHistory()
+    history.entries = [{ kind: 'evidence', ...entry }, ...history.entries.filter((item) => item.kind !== 'evidence' || item.hash !== entry.hash)].slice(0, 10)
+    writeSessionHistory(history)
+    sendJson(response, 200, { ok: true, count: history.entries.length })
+    return
+  }
+  sendJson(response, 405, { ok: false, error: 'Unsupported local session endpoint.' })
+}
+
+function readSessionHistory() {
+  try {
+    const parsed = JSON.parse(readFileSync(sessionHistoryPath, 'utf8'))
+    return {
+      version: 1,
+      entries: Array.isArray(parsed.entries) ? parsed.entries.slice(0, 10) : [],
+    }
+  } catch {
+    return { version: 1, entries: [] }
+  }
+}
+
+function writeSessionHistory(history) {
+  mkdirSync(resolve(repoRoot, 'runtime'), { recursive: true })
+  const temporaryPath = `${sessionHistoryPath}.tmp`
+  writeFileSync(temporaryPath, `${JSON.stringify(history, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+  renameSync(temporaryPath, sessionHistoryPath)
+}
+
+function validateActivityEntry(value) {
+  if (!value || typeof value !== 'object' || typeof value.message !== 'string' || typeof value.status !== 'string') {
+    throw new Error('本地操作记录格式无效。')
+  }
+  if (value.message.length === 0 || value.message.length > 500 || !/^[a-z_]+$/i.test(value.status) || value.status.length > 32) {
+    throw new Error('本地操作记录内容无效。')
+  }
+  return { at: new Date().toISOString(), message: value.message, status: value.status }
+}
+
+function validateEvidenceEntry(value) {
+  if (!value || typeof value !== 'object' || typeof value.label !== 'string' || typeof value.hash !== 'string' || !value.instance) {
+    throw new Error('本地链上证据格式无效。')
+  }
+  const hash = value.hash.toLowerCase()
+  const expectedUrl = `https://ccdexplorer.io/testnet/transaction/${hash}`
+  const index = String(value.instance.index)
+  const subindex = String(value.instance.subindex)
+  if (
+    value.label.length === 0 || value.label.length > 100 || !/^[0-9a-f]{64}$/.test(hash) || value.explorerUrl !== expectedUrl ||
+    !/^\d+$/.test(index) || !/^\d+$/.test(subindex)
+  ) {
+    throw new Error('本地链上证据内容无效。')
+  }
+  return { at: new Date().toISOString(), label: value.label, hash, explorerUrl: expectedUrl, instance: { index, subindex } }
+}
+
 async function handleTestnetApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/testnet/status') {
     const artifactStatus = inspectArtifacts()
@@ -185,15 +261,7 @@ async function verifyDeployment({ hash, sender }) {
   if (!outcome) return { final: false }
   const summary = outcome.summary
   if (summary.transactionType === 'failed') {
-    const view = await readInitializedState()
-    restoreObservedRound(view)
-    const phase = variantName(view.state.phase)
-    const code = summary.rejectReason?.rejectReason
-    const reason = contractRejectName(code)
-    if (phase === 'Commit') {
-      throw new Error(`该 start_round 交易被合约拒绝（${reason}）：当前实例已经处于 Commit，未再次锁定 2 CCD。`)
-    }
-    throw new Error(`start_round 被合约拒绝（${reason}），未锁定保证金。`)
+    throw new Error(`模块部署被链拒绝（${transactionRejectName(summary.rejectReason)}），未产生模块引用。`)
   }
   if (summary.type !== 'accountTransaction' || AccountAddress.toBase58(summary.sender) !== AccountAddress.toBase58(senderAddress)) {
     throw new Error('最终交易的签名账户与页面连接账户不一致。')
@@ -216,6 +284,9 @@ async function verifyInitialization({ hash, sender }) {
   const outcome = await finalizedOutcome(hash)
   if (!outcome) return { final: false }
   const summary = outcome.summary
+  if (summary.transactionType === 'failed') {
+    throw new Error(`0 CCD 合约初始化被链拒绝（${transactionRejectName(summary.rejectReason)}），未创建实例。`)
+  }
   if (summary.type !== 'accountTransaction' || AccountAddress.toBase58(summary.sender) !== AccountAddress.toBase58(senderAddress)) {
     throw new Error('最终交易的签名账户与页面连接账户不一致。')
   }
@@ -588,6 +659,18 @@ function contractRejectName(code) {
     [-16, 'TransferFailed'], [-17, 'BalanceMismatch'],
   ])
   return names.get(Number(code)) ?? `合约拒绝码 ${String(code)}`
+}
+
+function transactionRejectName(reason) {
+  const contractCode = reason?.rejectReason
+  if (typeof contractCode === 'number' || (typeof contractCode === 'string' && /^-?\d+$/.test(contractCode))) {
+    return contractRejectName(contractCode)
+  }
+  if (reason && typeof reason === 'object') {
+    const name = Object.keys(reason)[0]
+    if (name) return `链原生拒绝：${name}`
+  }
+  return '链未返回可识别的拒绝原因'
 }
 
 function variantName(value) {

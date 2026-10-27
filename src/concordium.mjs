@@ -9,8 +9,8 @@ export const INITIAL_MARKET = Object.freeze({
 
 export const START_ROUND_RULES = Object.freeze({
   guaranteeCcd: 2,
-  commitDurationMs: 8 * 60_000,
-  revealDurationMs: 5 * 60_000,
+  commitDurationMs: 3 * 60_000,
+  revealDurationMs: 3 * 60_000,
   maxBids: 2,
 })
 export class ConcordiumClientError extends Error {
