@@ -1,0 +1,108 @@
+{
+  "network": "Concordium Testnet",
+  "recordedAt": "2026-10-25",
+  "dataKind": "Real Testnet evidence for the current surplus_bid module, including two bid commitments, reserve reveal, one bid reveal, settlement, and an unrevealed-bid forfeiture",
+  "module": {
+    "contractName": "surplus_bid",
+    "reference": "7868967efbe78ea19f340e193449f728e7e0de77ec7f7a50654d6c33c590c77a",
+    "deployment": {
+      "hash": "ebda9ac744a286f76e78c9bbdd34e9e488aab6d1298b0960e3dc8b74d29a17d0",
+      "explorerUrl": "https://ccdexplorer.io/testnet/transaction/ebda9ac744a286f76e78c9bbdd34e9e488aab6d1298b0960e3dc8b74d29a17d0"
+    }
+  },
+  "currentCoreRound": {
+    "instance": {
+      "address": { "index": "13010", "subindex": "0" },
+      "contractUrl": "https://ccdexplorer.io/testnet/contract/13010/0",
+      "seller": "4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+      "feeRecipient": "4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4",
+      "guaranteeMicroCcd": "2000000"
+    },
+    "transactions": {
+      "initialization": {
+        "hash": "8cbcaa50f9724c3cd7f406f79e43c730663b2411bead707053464352388509b0",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/8cbcaa50f9724c3cd7f406f79e43c730663b2411bead707053464352388509b0",
+        "amountMicroCcd": "0"
+      },
+      "startRound": {
+        "hash": "b968100f188c9ec13ba94da1b1ffcc0e05c03d7dcb962898b7f6559260dc0c19",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/b968100f188c9ec13ba94da1b1ffcc0e05c03d7dcb962898b7f6559260dc0c19",
+        "receiveName": "surplus_bid.start_round",
+        "amountMicroCcd": "2000000"
+      },
+      "buyerACommit": {
+        "hash": "70a9bfbfef05a4354ccc1bd8976e719831fbddf0f2c8508054f58c2c9ae0c833",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/70a9bfbfef05a4354ccc1bd8976e719831fbddf0f2c8508054f58c2c9ae0c833",
+        "receiveName": "surplus_bid.commit_bid",
+        "bidder": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+        "sequence": 0,
+        "amountMicroCcd": "2000000"
+      },
+      "buyerBCommit": {
+        "hash": "4c22334c12994b37945f8b96af15cca76c92eeb28ccc0799a45ebb8f75c85ea8",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/4c22334c12994b37945f8b96af15cca76c92eeb28ccc0799a45ebb8f75c85ea8",
+        "receiveName": "surplus_bid.commit_bid",
+        "bidder": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+        "sequence": 1,
+        "amountMicroCcd": "2000000"
+      },
+      "sellerRevealReserve": {
+        "hash": "014ce2d3ba01b8456042ebabe3b31a17675f1750264243f1a09d54e1b289980a",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/014ce2d3ba01b8456042ebabe3b31a17675f1750264243f1a09d54e1b289980a",
+        "receiveName": "surplus_bid.reveal_reserve",
+        "amountMicroCcd": "0",
+        "reserveMicroCcd": "2000000"
+      },
+      "buyerAReveal": {
+        "hash": "2451df269a96eb95374d96eb9b522a94f1ebec02abb760095579b13523efb218",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/2451df269a96eb95374d96eb9b522a94f1ebec02abb760095579b13523efb218",
+        "receiveName": "surplus_bid.reveal_bid",
+        "bidder": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+        "revealedBidMicroCcd": "4000000",
+        "topUpMicroCcd": "2000000"
+      },
+      "finalize": {
+        "hash": "94574504234285fbd2ff3b8ee38b1f7e2467ce7cbcf27d2a05d318a28c01f55b",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/94574504234285fbd2ff3b8ee38b1f7e2467ce7cbcf27d2a05d318a28c01f55b",
+        "receiveName": "surplus_bid.finalize",
+        "amountMicroCcd": "0"
+      }
+    },
+    "finalView": {
+      "phase": "Settled",
+      "contractBalanceMicroCcd": "0",
+      "totalDepositedMicroCcd": "8000000",
+      "reserveMicroCcd": "2000000",
+      "buyerA": { "escrowMicroCcd": "4000000", "revealedBidMicroCcd": "4000000", "sequence": 0 },
+      "buyerB": { "escrowMicroCcd": "2000000", "revealedBidMicroCcd": null, "sequence": 1 },
+      "allocation": {
+        "winner": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
+        "winningBidMicroCcd": "4000000",
+        "priceMicroCcd": "3000000",
+        "buyerFeeMicroCcd": "100000",
+        "buyerRefundMicroCcd": "900000",
+        "sellerSettlementMicroCcd": "2900000",
+        "platformFeeMicroCcd": "200000"
+      },
+      "sellerTotalMicroCcd": "6900000",
+      "sellerTotalExplanation": "seller guarantee 2000000 + settlement 2900000 + buyer B unrevealed escrow 2000000",
+      "reconciliation": "8000000 = buyer A refund 900000 + seller total 6900000 + platform fee 200000"
+    }
+  },
+  "limitations": [
+    "Buyer B committed but did not reveal. This round validates the contract's unrevealed-bid forfeiture path; it is not evidence of two revealed bids competing for allocation.",
+    "The data proves Testnet CCD execution and public state only. The fixed service identifier and bids are demonstration inputs, not proof of off-chain delivery.",
+    "Network transaction fees are paid separately by transaction senders and are not part of the contract reconciliation above."
+  ],
+  "historicalEvidence": {
+    "sellerBoundEmptyRound": {
+      "instanceUrl": "https://ccdexplorer.io/testnet/contract/13007/0",
+      "startRound": "https://ccdexplorer.io/testnet/transaction/0ba1fda9132411614f8a4b5619631bb0b48d097efeb8d66235dd1f94b489afa9",
+      "cancellation": "https://ccdexplorer.io/testnet/transaction/a9250202bf873b349b54bc3fbb81cd0d4a315413719b1e37596be6295e9bce83"
+    },
+    "previousTechnicalInstance": {
+      "instanceUrl": "https://ccdexplorer.io/testnet/contract/13006/0",
+      "cancellation": "https://ccdexplorer.io/testnet/transaction/65bedbe7f44c9b6933f7898c34cb9dfe1fb68a2c726bf1bf0e83b2d9d221ef82"
+    }
+  }
+}

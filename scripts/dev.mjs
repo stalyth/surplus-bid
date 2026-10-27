@@ -34,7 +34,7 @@ const testnetClient = new ConcordiumGRPCNodeClient(
 const publicRoots = new Map([
   ['/app/', resolve(repoRoot, 'app')],
   ['/src/', resolve(repoRoot, 'src')],
-  ['/docs/evidence/', resolve(repoRoot, '../docs/evidence')],
+  ['/evidence/', resolve(repoRoot, 'public', 'evidence')],
   ['/vendor/', resolve(repoRoot, 'node_modules', '@concordium', 'web-sdk', 'lib', 'min')],
   ['/artifacts/', resolve(repoRoot, 'contracts', 'sealed-auction')],
 ])
@@ -58,6 +58,10 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', `http://${host}:${port}`)
     if (request.method === 'GET' && url.pathname === '/health') {
       sendJson(response, 200, { ok: true, service: 'surplus-bid-walking-skeleton' })
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/runtime-config.json') {
+      sendJson(response, 200, { mode: 'local-live', agentApi: true, walletActions: true })
       return
     }
     if (request.method === 'POST' && url.pathname === '/api/agent/decide') {
@@ -463,7 +467,7 @@ function loadArtifacts() {
 function loadRecordedVerification() {
   try {
     const artifact = loadArtifacts()
-    const evidence = JSON.parse(readFileSync(resolve(repoRoot, '../docs/evidence/sealed-auction-testnet.json'), 'utf8'))
+    const evidence = JSON.parse(readFileSync(resolve(repoRoot, 'public/evidence/sealed-auction-testnet.json'), 'utf8'))
     if (evidence.module?.reference !== artifact.moduleReference) throw new Error('记录的模块引用与当前 Wasm 不一致。')
     const current = evidence.currentCoreRound
     const address = current?.instance?.address ?? evidence.instance?.address
@@ -621,6 +625,7 @@ function loadLocalEnv(path) {
 
 function resolvePublicFile(pathname) {
   if (pathname === '/') return resolve(repoRoot, 'app/index.html')
+  if (pathname === '/run' || pathname === '/run/') return resolve(repoRoot, 'app/run/index.html')
   let decoded
   try { decoded = decodeURIComponent(pathname) } catch { return null }
   for (const [prefix, root] of publicRoots) {

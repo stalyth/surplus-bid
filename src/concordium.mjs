@@ -62,6 +62,21 @@ export function getTransactionSender(connection) {
   return sender
 }
 
+export function selectWalletAccount(connection, account) {
+  if (!connection?.authorizedAccounts?.includes(account)) {
+    throw new ConcordiumClientError('ACCOUNT_NOT_AUTHORIZED', '该账户尚未授权 SurplusBid。请先在 Concordium Wallet 中允许此网站连接该账户，再点击“刷新授权账户”。')
+  }
+  connection.accounts = [account]
+  return account
+}
+
+export function hasRevealedBid(view, bidder) {
+  if (typeof bidder !== 'string') return false
+  const bid = view?.state?.bids?.find((item) => String(item.bidder) === bidder)
+  const revealed = bid?.revealed_bid
+  return Boolean(revealed && typeof revealed === 'object' && Object.prototype.hasOwnProperty.call(revealed, 'Some'))
+}
+
 export async function connectConcordiumWallet({ timeoutMs = 15_000 } = {}) {
   const provider = globalThis.window?.concordium
   if (!provider || (typeof provider.connect !== 'function' && typeof provider.requestAccounts !== 'function') || typeof provider.getSelectedChain !== 'function') {
@@ -79,12 +94,12 @@ export async function connectConcordiumWallet({ timeoutMs = 15_000 } = {}) {
     )
   }
 
-  const accounts = await getCurrentWalletAccounts(
+  const authorizedAccounts = await requestWalletAccountSelection(
     provider,
     timeoutMs,
     '钱包站点授权超时，请检查扩展弹窗后重试。',
   )
-  if (!Array.isArray(accounts) || accounts.length === 0) {
+  if (authorizedAccounts.length === 0) {
     throw new ConcordiumClientError('NO_ACCOUNT', '钱包没有返回已授权账户。请在扩展中允许此站点访问当前 Testnet 账户后重试。')
   }
 
@@ -95,6 +110,11 @@ export async function connectConcordiumWallet({ timeoutMs = 15_000 } = {}) {
   )
   assertConcordiumTestnet(chain)
 
+  const mostRecent = typeof provider.getMostRecentlySelectedAccount === 'function'
+    ? normalizeConnectedAccounts(await withTimeout(provider.getMostRecentlySelectedAccount(), timeoutMs, '读取本站最近连接账户超时。'))[0]
+    : undefined
+  const account = authorizedAccounts.includes(mostRecent) ? mostRecent : authorizedAccounts[0]
+
   // Build the names through the installed SDK now, so later transaction calls use
   // the same validated contract/receive-name boundary rather than raw strings.
   sdk.ContractName.fromString('surplus_bid')
@@ -102,7 +122,8 @@ export async function connectConcordiumWallet({ timeoutMs = 15_000 } = {}) {
 
   return {
     provider,
-    accounts,
+    accounts: [account],
+    authorizedAccounts,
     chain,
     contractName: 'surplus_bid',
     viewReceiveName: 'surplus_bid.view',
@@ -119,7 +140,7 @@ function normalizeConnectedAccounts(connected) {
 
 export async function submitModuleDeployment(connection, { timeoutMs = 120_000 } = {}) {
   const sdk = requireTransactionSdk()
-  await refreshWalletAuthorization(connection, timeoutMs)
+  await verifyWalletAuthorization(connection, timeoutMs)
   const response = await fetchWithTimeout('/artifacts/module.wasm.v1', 10_000)
   if (!response.ok) {
     throw new ConcordiumClientError('ARTIFACT_UNAVAILABLE', '无法读取当前 Wasm 构建。请先运行 pnpm check。')
@@ -143,7 +164,7 @@ export async function submitMarketInitialization(connection, moduleReference, { 
   if (typeof moduleReference !== 'string' || !/^[0-9a-f]{64}$/i.test(moduleReference)) {
     throw new ConcordiumClientError('INVALID_MODULE_REFERENCE', '部署模块引用无效，无法创建实例。')
   }
-  await refreshWalletAuthorization(connection, timeoutMs)
+  await verifyWalletAuthorization(connection, timeoutMs)
   const response = await fetchWithTimeout('/artifacts/schema.bin', 10_000)
   if (!response.ok) {
     throw new ConcordiumClientError('SCHEMA_UNAVAILABLE', '无法读取当前合约 schema。请先运行 pnpm check。')
@@ -226,7 +247,7 @@ export async function submitStartRound(connection, initialization, plan, { timeo
   if (!plan?.parameters || !initialization?.address) {
     throw new ConcordiumClientError('ROUND_PLAN_UNAVAILABLE', '本轮承诺参数缺失，未发送交易。')
   }
-  await refreshWalletAuthorization(connection, timeoutMs)
+  await verifyWalletAuthorization(connection, timeoutMs)
   if (connection.accounts[0] !== initialization.sender || connection.accounts[0] !== plan.seller) {
     throw new ConcordiumClientError('WRONG_SELLER_ACCOUNT', '当前钱包账户不是本实例的卖家，未发送交易。')
   }
@@ -253,7 +274,7 @@ export async function submitStartRound(connection, initialization, plan, { timeo
 export async function submitCancelRound(connection, initialization, { timeoutMs = 120_000 } = {}) {
   const sdk = requireTransactionSdk()
   if (!initialization?.address) throw new ConcordiumClientError('INSTANCE_UNAVAILABLE', '当前实例信息不完整，未发送取消交易。')
-  await refreshWalletAuthorization(connection, timeoutMs)
+  await verifyWalletAuthorization(connection, timeoutMs)
   const payload = {
     amount: sdk.CcdAmount.fromCcd(0),
     address: sdk.ContractAddress.create(BigInt(initialization.address.index), BigInt(initialization.address.subindex)),
@@ -328,7 +349,7 @@ export async function submitBidReveal(connection, initialization, plan, { timeou
 export async function submitFinalizeRound(connection, initialization, { timeoutMs = 120_000 } = {}) {
   const sdk = requireTransactionSdk()
   if (!initialization?.address) throw new ConcordiumClientError('INSTANCE_UNAVAILABLE', '当前实例信息不完整，未发送结算交易。')
-  await refreshWalletAuthorization(connection, timeoutMs)
+  await verifyWalletAuthorization(connection, timeoutMs)
   const payload = updatePayload(sdk, initialization, 'surplus_bid.finalize', 0)
   const hash = await withTimeout(connection.provider.sendTransaction(connection.accounts[0], sdk.AccountTransactionType.Update, payload), timeoutMs, '等待钱包确认结算超时。请检查原请求，勿重复发送。')
   return assertTransactionHash(hash)
@@ -471,52 +492,44 @@ function bidBackupKey(plan) {
 
 async function submitSchemaUpdate(connection, initialization, receiveName, amountCcd, parameters, timeoutMs) {
   const sdk = requireTransactionSdk()
-  await refreshWalletAuthorization(connection, timeoutMs)
+  await verifyWalletAuthorization(connection, timeoutMs)
   const payload = updatePayload(sdk, initialization, receiveName, amountCcd)
   const hash = await withTimeout(connection.provider.sendTransaction(connection.accounts[0], sdk.AccountTransactionType.Update, payload, parameters, await getSchemaBase64()), timeoutMs, `等待钱包确认 ${receiveName} 超时。请检查原请求，勿重复发送。`)
   return assertTransactionHash(hash)
 }
 
-async function refreshWalletAuthorization(connection, timeoutMs) {
+export async function verifyWalletAuthorization(connection, timeoutMs = 15_000) {
   const provider = connection?.provider
   if (!provider || (typeof provider.connect !== 'function' && typeof provider.requestAccounts !== 'function')) {
     throw new ConcordiumClientError('WALLET_NOT_FOUND', '钱包站点授权接口不可用，未发送交易。')
   }
-  const accounts = await getCurrentWalletAccounts(
+  const selectedAccount = connection.accounts?.[0]
+  if (typeof selectedAccount !== 'string' || selectedAccount.length === 0) {
+    throw new ConcordiumClientError('WALLET_ACCOUNT_MISSING', '请先在页面选择交易账户；未发送交易。')
+  }
+  const authorizedAccounts = await requestWalletAccountSelection(
     provider,
     timeoutMs,
-    '刷新钱包站点授权超时。请检查扩展弹窗；未发送交易。',
+    '核对钱包授权账户超时。请检查扩展弹窗；未发送交易。',
   )
-  if (accounts.length === 0) {
-    throw new ConcordiumClientError('NO_ACCOUNT', '钱包没有返回当前站点已授权账户，未发送交易。')
+  if (!authorizedAccounts.includes(selectedAccount)) {
+    throw new ConcordiumClientError('ACCOUNT_NOT_AUTHORIZED', '页面选择的账户已不在本站授权列表中，未发送交易。请刷新授权账户并重新选择。')
   }
   const chain = await withTimeout(provider.getSelectedChain(), timeoutMs, '读取钱包网络超时；未发送交易。')
   assertConcordiumTestnet(chain)
-  connection.accounts = accounts
+  connection.authorizedAccounts = authorizedAccounts
+  return selectedAccount
 }
 
-async function getCurrentWalletAccounts(provider, timeoutMs, timeoutMessage) {
-  // The wallet returns the active account only when that account is also
-  // allowlisted for this origin. Prefer it to the complete allowlist returned
-  // by requestAccounts, whose first item may be an older account.
-  if (typeof provider.getMostRecentlySelectedAccount === 'function') {
-    const selected = await withTimeout(
-      provider.getMostRecentlySelectedAccount(),
-      timeoutMs,
-      '读取钱包当前账户超时，请检查扩展后重试。',
-    )
-    const selectedAccounts = normalizeConnectedAccounts(selected)
-    if (selectedAccounts.length > 0) return selectedAccounts
-  }
-
-  // The interactive connection request remains the fallback when this origin
-  // has no currently selected account available yet.
-  const connected = await withTimeout(
+async function requestWalletAccountSelection(provider, timeoutMs, timeoutMessage) {
+  // This lists accounts authorized for this site. The wallet may return an
+  // existing allowlist without opening a picker, so the page selects explicitly.
+  const selected = await withTimeout(
     typeof provider.requestAccounts === 'function' ? provider.requestAccounts() : provider.connect(),
     timeoutMs,
     timeoutMessage,
   )
-  return normalizeConnectedAccounts(connected) ?? []
+  return [...new Set(normalizeConnectedAccounts(selected))]
 }
 
 function updatePayload(sdk, initialization, receiveName, amountCcd) {

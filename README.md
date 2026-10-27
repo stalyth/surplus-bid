@@ -103,6 +103,30 @@ pnpm eval:decisions
 
 2026-10-25 的 `seller-reserve-v2` 真实评测结果：模型市场分类 24/24，代码裁决后的最终动作 24/24，模型调用失败 0/24；6/24 次触发代码规则覆盖。该结果只覆盖固定用例，不代表真实市场上的统计准确率。
 
+## 运行模式
+
+项目把公开观察前端和本地动态服务明确分开，两种模式复用同一套核心页：
+
+- `pnpm dev` 启动 `local-live`：本地 Node 服务读取 `.env`，开放 DeepSeek 决策、Concordium Wallet、Testnet 写入与只读核验。
+- `pnpm build` 生成 `dist/` 中的 `public-readonly`：只展示随仓库提交的脱敏证据 JSON 与 CCDExplorer 链接，不连接钱包，不提供 DeepSeek 或 Testnet 写接口。
+- `pnpm preview` 在 `http://127.0.0.1:4174` 预览公开构建。
+
+本地页面顶部的“本站交易账户”列表用于明确选择签名地址；“刷新授权账户”重新读取 Concordium Wallet 为本站开放的账户。若目标账户不在列表中，需先在钱包中允许该账户连接本站，再刷新。钱包首页左上角显示的账户不一定是本站获准使用的账户，发送前还应在钱包确认页核对签名地址。
+
+运行模式由 `/runtime-config.json` 明确声明。配置读取失败时页面默认进入 `public-readonly`，不会猜测域名或误开放动态操作。
+
+### Vercel
+
+导入 `stalyth/surplus-bid` 仓库后使用：
+
+```text
+Framework Preset: Other
+Build Command: pnpm build
+Output Directory: dist
+```
+
+`vercel.json` 已记录相同设置及 `/run` 路由。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
+
 ## 信任与隐私边界
 
 - commit-reveal 只隐藏承诺期内的金额，不提供揭示后的永久隐私。

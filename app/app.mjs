@@ -15,6 +15,7 @@ import {
   connectConcordiumWallet,
   downloadReserveRevealBackup,
   getTransactionSender,
+  hasRevealedBid,
   loadReserveRevealBackup,
   loadBidRevealBackup,
   prepareStartRound,
@@ -23,6 +24,7 @@ import {
   START_ROUND_RULES,
   saveReserveRevealBackup,
   saveBidRevealBackup,
+  selectWalletAccount,
   shortAccountAddress,
   submitMarketInitialization,
   submitModuleDeployment,
@@ -34,6 +36,7 @@ import {
   submitStartRound,
 } from '/src/concordium.mjs'
 
+const runtime = await loadRuntimeConfig()
 let auction = null
 let activity = []
 let walletConnection = null
@@ -59,6 +62,9 @@ const elements = {
   auctionDeadline: byId('auction-deadline'),
   walletButton: byId('wallet-button'),
   walletStatus: byId('wallet-status'),
+  walletAccountControl: byId('wallet-account-control'),
+  walletAccountSelect: byId('wallet-account-select'),
+  walletAccountNotice: byId('wallet-account-notice'),
   sellerDecisionButton: byId('seller-decision-button'),
   sellerDecisionStatus: byId('seller-decision-status'),
   deployModuleButton: byId('deploy-module-button'),
@@ -86,10 +92,12 @@ const elements = {
   activityLog: byId('activity-log'),
   evidenceSummary: byId('evidence-summary'),
   evidenceList: byId('evidence-list'),
+  runtimeBanner: byId('runtime-banner'),
+  runtimeModeBadge: byId('runtime-mode-badge'),
 }
 
 elements.sellerDecisionButton.addEventListener('click', async () => {
-  if (testnet.agentBusy) return
+  if (!runtime.agentApi || testnet.agentBusy) return
   testnet.agentBusy = true
   testnet.sellerDecision = null
   elements.sellerDecisionStatus.textContent = '正在调用 Seller Agent，并等待代码裁决…'
@@ -127,15 +135,18 @@ elements.sellerDecisionButton.addEventListener('click', async () => {
 })
 
 elements.walletButton.addEventListener('click', async () => {
+  if (!runtime.walletActions) return
   elements.walletButton.disabled = true
   elements.walletButton.textContent = '等待钱包…'
   try {
     walletConnection = await connectConcordiumWallet()
     observeWalletAccountChanges(walletConnection.provider)
     const account = walletConnection.accounts[0]
-    record(`已连接 Testnet 钱包 ${shortAccountAddress(account)}；本次未发送交易。`)
+    populateWalletAccounts()
+    testnet.bidPlan = testnet.initialization ? loadBidRevealBackup(testnet.initialization, account) : null
+    record(`本站已授权 ${walletConnection.authorizedAccounts.length} 个 Testnet 账户；当前交易账户 ${shortAccountAddress(account)}。`)
     await refreshTestnetStatus()
-    setMessage('钱包与公共 Testnet 节点均已核验。真实交易按钮会按链上阶段开放。', 'success')
+    setMessage(`本站交易账户：${shortAccountAddress(account)}。如与钱包首页不同，请从顶部列表明确选择；缺少账户则先在钱包中授权本站。`, 'success')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const tone = error instanceof ConcordiumClientError ? 'warning' : 'error'
@@ -146,13 +157,49 @@ elements.walletButton.addEventListener('click', async () => {
   }
 })
 
+elements.walletAccountSelect.addEventListener('change', () => {
+  if (!walletConnection || testnet.busy) return
+  try {
+    const account = selectWalletAccount(walletConnection, elements.walletAccountSelect.value)
+    testnet.bidPlan = testnet.initialization ? loadBidRevealBackup(testnet.initialization, account) : null
+    record(`本站交易账户已明确选择为 ${shortAccountAddress(account)}；本次未发送交易。`)
+    setMessage(`交易前会核对 ${shortAccountAddress(account)} 仍获本站授权；请在钱包确认页再次核对签名地址。`, 'success')
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : String(error), 'warning')
+  }
+  render()
+})
+
+function populateWalletAccounts() {
+  elements.walletAccountSelect.replaceChildren()
+  for (const account of walletConnection?.authorizedAccounts ?? []) {
+    const option = document.createElement('option')
+    option.value = account
+    option.textContent = shortAccountAddress(account)
+    option.title = account
+    elements.walletAccountSelect.append(option)
+  }
+  if (walletConnection) elements.walletAccountSelect.value = walletConnection.accounts[0]
+}
+
+function transactionConnection() {
+  if (!walletConnection) throw new ConcordiumClientError('WALLET_NOT_CONNECTED', '请先连接钱包并选择本站交易账户。')
+  return {
+    ...walletConnection,
+    accounts: [...walletConnection.accounts],
+    authorizedAccounts: [...walletConnection.authorizedAccounts],
+  }
+}
+
 function observeWalletAccountChanges(provider) {
   if (observedWalletProvider === provider || typeof provider?.on !== 'function') return
   observedWalletProvider = provider
   provider.on('accountChanged', (account) => {
     if (typeof account !== 'string' || account.length === 0 || !walletConnection) return
     if (walletConnection.accounts[0] === account) return
+    if (!walletConnection.authorizedAccounts.includes(account)) walletConnection.authorizedAccounts.push(account)
     walletConnection.accounts = [account]
+    populateWalletAccounts()
     testnet.bidPlan = testnet.initialization ? loadBidRevealBackup(testnet.initialization, account) : null
     record(`钱包当前账户已切换为 ${shortAccountAddress(account)}；本次未发送交易。`)
     setMessage(`已同步钱包当前账户：${shortAccountAddress(account)}。`, 'success')
@@ -160,6 +207,7 @@ function observeWalletAccountChanges(provider) {
   })
   provider.on('accountDisconnected', () => {
     walletConnection = null
+    populateWalletAccounts()
     testnet.bidPlan = null
     record('钱包当前账户已断开；已返回哈希的交易仍会继续通过公共节点核验。', 'rejected')
     setMessage('钱包当前账户已断开。若交易已返回哈希，页面会继续只读核验；请勿重发。', 'warning')
@@ -169,7 +217,7 @@ function observeWalletAccountChanges(provider) {
 
 elements.deployModuleButton.addEventListener('click', () => {
   runTestnetAction('deploy', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const hash = await submitModuleDeployment(connection)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'deploy', hash, sender }
@@ -184,7 +232,7 @@ elements.deployModuleButton.addEventListener('click', () => {
 
 elements.initContractButton.addEventListener('click', () => {
   runTestnetAction('init', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const hash = await submitMarketInitialization(connection, testnet.status.moduleReference)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'init', hash, sender }
@@ -206,7 +254,7 @@ for (const option of REAL_BID_OPTIONS) {
   const button = option.id === 'buyer-a' ? elements.commitBidAButton : elements.commitBidBButton
   button.addEventListener('click', () => {
     runTestnetAction('commit_bid', async () => {
-      const connection = walletConnection
+      const connection = transactionConnection()
       const plan = await prepareBidCommitment(connection, testnet.initialization, option.amountCcd)
       saveBidRevealBackup(plan)
       testnet.bidPlan = plan
@@ -230,7 +278,7 @@ for (const option of REAL_BID_OPTIONS) {
 
 elements.revealReserveButton.addEventListener('click', () => {
   runTestnetAction('reveal_reserve', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const plan = testnet.startPlan ?? loadReserveRevealBackup(testnet.initialization)
     const hash = await submitReserveReveal(connection, testnet.initialization, plan)
     const sender = getTransactionSender(connection)
@@ -244,7 +292,7 @@ elements.revealReserveButton.addEventListener('click', () => {
 
 elements.revealBidButton.addEventListener('click', () => {
   runTestnetAction('reveal_bid', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const plan = testnet.bidPlan ?? loadBidRevealBackup(testnet.initialization, connection.accounts[0])
     const hash = await submitBidReveal(connection, testnet.initialization, plan)
     const sender = getTransactionSender(connection)
@@ -263,7 +311,7 @@ elements.revealBidButton.addEventListener('click', () => {
 
 elements.finalizeChainButton.addEventListener('click', () => {
   runTestnetAction('finalize', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const hash = await submitFinalizeRound(connection, testnet.initialization)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'finalize', hash, sender }
@@ -285,7 +333,7 @@ elements.readViewButton.addEventListener('click', () => {
 
 elements.startRoundButton.addEventListener('click', () => {
   runTestnetAction('start_round', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const decision = testnet.sellerDecision
     if (!decision || decision.final.action === 'needs_human') {
       throw new ConcordiumClientError('SELLER_DECISION_REQUIRED', '请先生成通过代码裁决的 Seller Agent 底价建议；needs_human 不会进入钱包流程。')
@@ -313,7 +361,7 @@ elements.startRoundButton.addEventListener('click', () => {
 
 elements.cancelRoundButton.addEventListener('click', () => {
   runTestnetAction('cancel', async () => {
-    const connection = walletConnection
+    const connection = transactionConnection()
     const hash = await submitCancelRound(connection, testnet.initialization)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'cancel', hash, sender }
@@ -430,21 +478,36 @@ function render() {
 
   elements.createButton.disabled = created && !finalized
   elements.createButton.textContent = finalized ? '创建下一轮本地预览' : created ? '规则已固定' : '创建本地规则预览'
-  elements.sellerDecisionButton.disabled = testnet.agentBusy || testnet.round !== null
-  elements.sellerDecisionButton.textContent = testnet.agentBusy
-    ? 'Seller Agent 决策中…'
-    : testnet.sellerDecision ? '重新生成底价建议' : '生成下一轮底价建议'
+  elements.sellerDecisionButton.disabled = !runtime.agentApi || testnet.agentBusy || testnet.round !== null
+  elements.sellerDecisionButton.textContent = !runtime.agentApi
+    ? '真实评测结果已记录'
+    : testnet.agentBusy ? 'Seller Agent 决策中…' : testnet.sellerDecision ? '重新生成底价建议' : '生成下一轮底价建议'
   elements.auctionPhase.textContent = auction?.phase ?? 'Draft'
   elements.auctionId.textContent = auction?.id ?? '创建后生成'
   elements.auctionDeadline.textContent = auction ? formatDate(auction.commitEnd) : '创建后生成'
-  if (walletConnection) {
+  if (!runtime.walletActions) {
+    elements.walletButton.disabled = true
+    elements.walletButton.textContent = '公开只读'
+    elements.walletStatus.textContent = '公开只读模式'
+    elements.walletAccountControl.hidden = true
+    elements.walletAccountNotice.hidden = true
+  } else if (walletConnection) {
     elements.walletButton.disabled = false
-    elements.walletButton.textContent = `已连接 ${shortAccountAddress(walletConnection.accounts[0])}`
-    elements.walletStatus.textContent = `Testnet · ${shortAccountAddress(walletConnection.accounts[0])}`
+    elements.walletButton.textContent = '刷新授权账户'
+    elements.walletStatus.textContent = `本站交易账户 · ${shortAccountAddress(walletConnection.accounts[0])}`
+    elements.walletAccountControl.hidden = false
+    elements.walletAccountSelect.disabled = testnet.busy || testnet.pending !== null
+    elements.walletAccountSelect.value = walletConnection.accounts[0]
+    elements.walletAccountNotice.hidden = false
+    elements.walletAccountNotice.textContent = walletConnection.authorizedAccounts.length === 1
+      ? `钱包仅向本站返回 ${shortAccountAddress(walletConnection.accounts[0])}。若钱包首页显示另一个账户，请先在钱包中允许该账户连接本地站点，再点“刷新授权账户”。`
+      : `本站已获授权 ${walletConnection.authorizedAccounts.length} 个账户。请在右上角明确选择交易账户，并在钱包交易确认页复核地址。`
   } else {
     elements.walletButton.disabled = false
     elements.walletButton.textContent = '连接钱包'
     elements.walletStatus.textContent = '未连接'
+    elements.walletAccountControl.hidden = true
+    elements.walletAccountNotice.hidden = true
   }
   renderTestnet()
   elements.deadlineStatus.textContent = readyToFinalize || finalized ? '揭示结束' : '承诺期'
@@ -487,6 +550,17 @@ function render() {
 }
 
 function renderTestnet() {
+  if (!runtime.walletActions) {
+    for (const button of [
+      elements.deployModuleButton, elements.initContractButton, elements.readViewButton,
+      elements.startRoundButton, elements.cancelRoundButton, elements.backupReserveButton,
+      elements.commitBidAButton, elements.commitBidBButton, elements.revealReserveButton,
+      elements.revealBidButton, elements.finalizeChainButton,
+    ]) button.disabled = true
+    elements.startRoundButton.textContent = '本地完整模式可开始轮次'
+    elements.testnetStatus.textContent = '公开只读模式不会连接钱包或调用本地 API。下方真实 Testnet 记录可通过 CCDExplorer 独立核验。'
+    return
+  }
   const connected = walletConnection !== null
   const currentWalletAccount = walletConnection?.accounts?.[0] ?? null
   const hasStatus = testnet.status !== null
@@ -497,6 +571,7 @@ function renderTestnet() {
   const phase = phaseName(testnet.view?.state?.phase)
   const bidAddresses = new Set((testnet.view?.state?.bids ?? []).map((bid) => String(bid.bidder)))
   const selectedBidPlan = testnet.bidPlan ?? (hasInitialization && currentWalletAccount ? loadBidRevealBackup(testnet.initialization, currentWalletAccount) : null)
+  const selectedBidAlreadyRevealed = hasRevealedBid(testnet.view, currentWalletAccount)
   const commitOpen = phase === 'Commit' && Date.now() < Number(testnet.round?.commitEnd)
   const sellerRevealOpen = phase === 'Commit' && Date.now() >= Number(testnet.round?.commitEnd) && Date.now() < Number(testnet.round?.sellerRevealEnd)
   const buyerRevealOpen = phase === 'ReserveRevealed' && Date.now() >= Number(testnet.round?.sellerRevealEnd) && Date.now() < Number(testnet.round?.buyerRevealEnd)
@@ -514,7 +589,7 @@ function renderTestnet() {
   elements.commitBidAButton.disabled = !connected || !commitOpen || isInstanceSeller || bidAddresses.has(currentWalletAccount) || testnet.busy || testnet.pending !== null
   elements.commitBidBButton.disabled = !connected || !commitOpen || isInstanceSeller || bidAddresses.has(currentWalletAccount) || testnet.busy || testnet.pending !== null
   elements.revealReserveButton.disabled = !connected || !sellerRevealOpen || !isInstanceSeller || !testnet.startPlan || testnet.busy || testnet.pending !== null
-  elements.revealBidButton.disabled = !connected || !buyerRevealOpen || !selectedBidPlan || testnet.busy || testnet.pending !== null
+  elements.revealBidButton.disabled = !connected || !buyerRevealOpen || !selectedBidPlan || selectedBidAlreadyRevealed || testnet.busy || testnet.pending !== null
   elements.finalizeChainButton.disabled = !connected || !finalizeOpen || testnet.busy || testnet.pending !== null
   if (testnet.busy) {
     const label = testnet.pending?.kind === 'init' ? '等待初始化确认…' : testnet.pending?.kind === 'deploy' ? '等待部署确认…' : '正在准备…'
@@ -525,8 +600,9 @@ function renderTestnet() {
   elements.initContractButton.textContent = canCancel
     ? '创建隔离新实例（旧轮次已过期）'
     : hasInitialization ? '创建下一 0 CCD 实例' : '2. 创建 0 CCD 实例'
-  elements.startRoundButton.textContent = hasRound ? '轮次已开始' : '4. 开始轮次 + 2 CCD'
+  elements.startRoundButton.textContent = hasRound ? '轮次已开始' : '4. 采用最终底价并开始轮次 · 锁定 2 CCD'
   elements.cancelRoundButton.textContent = canCancel ? '取消过期空轮次并退款' : '过期后可取消并退款'
+  elements.revealBidButton.textContent = selectedBidAlreadyRevealed ? '当前买家已揭示报价' : '当前买家揭示报价'
 }
 
 async function refreshTestnetStatus() {
@@ -716,7 +792,7 @@ async function loadEvidence() {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 4_000)
   try {
-    const response = await fetch('/docs/evidence/auction-testnet.json', {
+    const response = await fetch('/evidence/sealed-auction-testnet.json', {
       cache: 'no-store',
       signal: controller.signal,
     })
@@ -733,31 +809,81 @@ async function loadEvidence() {
 }
 
 function renderEvidence(evidence) {
-  const address = `<${evidence.address.index},${evidence.address.subindex}>`
-  elements.evidenceSummary.textContent = `${evidence.network} · 合约 ${address} · 单买家旧规则已结算，余额归零`
+  const round = evidence.currentCoreRound
+  const address = `<${round.instance.address.index},${round.instance.address.subindex}>`
+  elements.evidenceSummary.textContent = `${evidence.network} · 合约 ${address} · ${round.finalView.phase} · 成交价 ${formatMicroCcd(round.finalView.allocation.priceMicroCcd)} CCD · 合约余额 ${formatMicroCcd(round.finalView.contractBalanceMicroCcd)} CCD`
   elements.evidenceList.replaceChildren()
 
   const labels = new Map([
-    ['deploy', '部署模块'],
-    ['init', '创建拍卖'],
-    ['bidA', '买家 A 报价'],
-    ['finalizeSingle', '单买家结算'],
+    ['initialization', '创建拍卖实例'],
+    ['startRound', '开始隐藏报价轮次'],
+    ['buyerACommit', '买家 A 提交承诺'],
+    ['buyerBCommit', '买家 B 提交承诺'],
+    ['sellerRevealReserve', '卖家揭示底价'],
+    ['buyerAReveal', '买家 A 揭示报价'],
+    ['finalize', '链上结算'],
   ])
 
-  for (const item of evidence.done) {
+  for (const [step, item] of Object.entries(round.transactions)) {
     const row = document.createElement('a')
-    row.href = `https://ccdexplorer.io/testnet/transaction/${item.hash}`
+    row.href = item.explorerUrl
     row.target = '_blank'
     row.rel = 'noreferrer'
     const label = document.createElement('span')
     const hash = document.createElement('code')
     const status = document.createElement('strong')
-    label.textContent = labels.get(item.step) ?? item.step
+    label.textContent = labels.get(step) ?? step
     hash.textContent = `${item.hash.slice(0, 10)}…${item.hash.slice(-6)}`
-    status.textContent = item.finalized ? 'Finalized ↗' : 'Unconfirmed'
+    status.textContent = 'Finalized ↗'
     row.append(label, hash, status)
     elements.evidenceList.append(row)
   }
+}
+
+async function loadAgentEvaluation() {
+  if (runtime.agentApi) return
+  try {
+    const response = await fetch('/evidence/seller-agent-evaluation.json', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const evidence = await response.json()
+    const decision = evidence.representativeDecision
+    elements.sellerDecisionStatus.textContent = [
+      `真实 API 固定评测：${evidence.model} · ${evidence.promptVersion}`,
+      `模型分类 ${evidence.modelSignalCorrect}/${evidence.totalRuns}；最终动作 ${evidence.finalDecisionCorrect}/${evidence.totalRuns}；调用失败 ${evidence.modelCallFailures}/${evidence.totalRuns}`,
+      `代表性 demo data：${decision.marketSignal} → ${decision.finalAction}，最终底价 ${formatMicroCcd(decision.finalReserveMicroCcd)} CCD。该评测与当前 Testnet 拍卖不是同一轮。`,
+    ].join('\n')
+    elements.sellerDecisionStatus.dataset.tone = 'success'
+  } catch (error) {
+    elements.sellerDecisionStatus.textContent = `Agent 评测证据读取失败：${error instanceof Error ? error.message : String(error)}`
+    elements.sellerDecisionStatus.dataset.tone = 'error'
+  }
+}
+
+async function loadRuntimeConfig() {
+  try {
+    const response = await fetch('/runtime-config.json', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const value = await response.json()
+    if (value?.mode !== 'local-live' && value?.mode !== 'public-readonly') throw new Error('mode 无效')
+    return {
+      mode: value.mode,
+      agentApi: value.agentApi === true,
+      walletActions: value.walletActions === true,
+    }
+  } catch {
+    return { mode: 'public-readonly', agentApi: false, walletActions: false }
+  }
+}
+
+function renderRuntimeMode() {
+  const local = runtime.mode === 'local-live'
+  document.body.dataset.runtimeMode = runtime.mode
+  elements.runtimeModeBadge.textContent = local ? 'Local live mode' : 'Public evidence mode'
+  elements.runtimeModeBadge.className = `badge ${local ? 'badge-warning' : 'badge-success'}`
+  elements.runtimeBanner.textContent = local
+    ? '本地完整模式：可调用 DeepSeek、连接 Concordium Wallet，并向 Testnet 发送经用户确认的交易。'
+    : '公开只读模式：无需钱包即可查看真实 Testnet 与模型评测证据；动态操作仅在本地完整模式开放。'
+  elements.runtimeBanner.dataset.tone = local ? 'live' : 'readonly'
 }
 
 function formatDate(value) {
@@ -784,5 +910,7 @@ function byId(id) {
   return element
 }
 
+renderRuntimeMode()
 render()
 loadEvidence()
+loadAgentEvaluation()

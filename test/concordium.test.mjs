@@ -12,9 +12,12 @@ import {
   assertConcordiumTestnet,
   connectConcordiumWallet,
   getTransactionSender,
+  hasRevealedBid,
   prepareStartRound,
   prepareBidCommitment,
+  selectWalletAccount,
   shortAccountAddress,
+  verifyWalletAuthorization,
 } from '../src/concordium.mjs'
 
 const INSTANCE = Object.freeze({
@@ -58,7 +61,7 @@ test('compares a zero-CCD initialization amount as the SDK decimal value', () =>
   assert.equal(sdk.CcdAmount.toMicroCcd(sdk.CcdAmount.fromCcd(0)).toFixed(0), '0')
 })
 
-test('uses the allowlisted current wallet account ahead of older connected accounts', async () => {
+test('an explicit connect lists authorized accounts even when the recent account is older', async () => {
   const originalWindow = globalThis.window
   let connectCalls = 0
   let requestAccountCalls = 0
@@ -72,19 +75,75 @@ test('uses the allowlisted current wallet account ahead of older connected accou
       },
       requestAccounts: async () => {
         requestAccountCalls += 1
-        return [INSTANCE.sender]
+        return ['4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb']
       },
       getSelectedChain: async () => CONCORDIUM_TESTNET_GENESIS_HASH,
     },
   }
   try {
     const connection = await connectConcordiumWallet()
-    assert.deepEqual(connection.accounts, [INSTANCE.sender])
+    assert.deepEqual(connection.accounts, ['4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb'])
+    assert.deepEqual(connection.authorizedAccounts, connection.accounts)
     assert.equal(connectCalls, 0)
-    assert.equal(requestAccountCalls, 0)
+    assert.equal(requestAccountCalls, 1)
   } finally {
     globalThis.window = originalWindow
   }
+})
+
+test('explicitly selected buyer B remains the transaction sender after authorization refresh', async () => {
+  const buyerA = INSTANCE.sender
+  const buyerB = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
+  const originalWindow = globalThis.window
+  const provider = {
+    requestAccounts: async () => [buyerA, buyerB],
+    getMostRecentlySelectedAccount: async () => buyerA,
+    getSelectedChain: async () => CONCORDIUM_TESTNET_GENESIS_HASH,
+  }
+  globalThis.window = { concordiumSDK: sdk, concordium: provider }
+  try {
+    const connection = await connectConcordiumWallet()
+    assert.deepEqual(connection.authorizedAccounts, [buyerA, buyerB])
+    selectWalletAccount(connection, buyerB)
+    await verifyWalletAuthorization(connection)
+    assert.equal(getTransactionSender(connection), buyerB)
+    assert.deepEqual(connection.accounts, [buyerB])
+  } finally {
+    globalThis.window = originalWindow
+  }
+})
+
+test('revoked account blocks transaction preparation without silently switching to another account', async () => {
+  const buyerA = INSTANCE.sender
+  const buyerB = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
+  const connection = {
+    provider: {
+      requestAccounts: async () => [buyerA],
+      getSelectedChain: async () => CONCORDIUM_TESTNET_GENESIS_HASH,
+    },
+    accounts: [buyerB],
+    authorizedAccounts: [buyerA, buyerB],
+  }
+  await assert.rejects(
+    verifyWalletAuthorization(connection),
+    (error) => error instanceof ConcordiumClientError && error.code === 'ACCOUNT_NOT_AUTHORIZED',
+  )
+  assert.deepEqual(connection.accounts, [buyerB])
+})
+
+test('detects whether the selected buyer has already revealed on chain', () => {
+  const buyerA = INSTANCE.sender
+  const buyerB = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
+  const view = {
+    state: {
+      bids: [
+        { bidder: buyerA, revealed_bid: { Some: ['4000000'] } },
+        { bidder: buyerB, revealed_bid: { None: [] } },
+      ],
+    },
+  }
+  assert.equal(hasRevealedBid(view, buyerA), true)
+  assert.equal(hasRevealedBid(view, buyerB), false)
 })
 
 test('keeps the transaction sender available after the global wallet connection disconnects', () => {

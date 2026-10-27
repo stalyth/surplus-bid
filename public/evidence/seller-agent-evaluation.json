@@ -1,0 +1,28 @@
+{
+  "dataKind": "Real DeepSeek API evaluation on explicitly labeled demo inputs",
+  "generatedAt": "2026-10-25T09:51:59.515Z",
+  "model": "deepseek-flash",
+  "promptVersion": "seller-reserve-v2",
+  "caseCount": 8,
+  "runsPerCase": 3,
+  "totalRuns": 24,
+  "modelSignalCorrect": 24,
+  "finalDecisionCorrect": 24,
+  "ruleOverrideRuns": 6,
+  "modelCallFailures": 0,
+  "representativeDecision": {
+    "dataLabel": "demo data",
+    "currentReserveMicroCcd": "2000000",
+    "previousSupplyUnits": 1,
+    "nextSupplyUnits": 1,
+    "marketSignal": "strong",
+    "finalAction": "raise",
+    "finalReserveMicroCcd": "2200000",
+    "evidence": ["soldRate", "averageBidderCount", "previousAverageSurplus", "supplyChange"]
+  },
+  "limitations": [
+    "The inputs are hand-written demo cases, not a statistical sample of a live market.",
+    "The current verified Testnet auction predates this decision layer and is not the same end-to-end run.",
+    "The model cannot sign wallet transactions or change contract settlement rules."
+  ]
+}
