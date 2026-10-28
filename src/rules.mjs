@@ -13,8 +13,8 @@ export const DEMO_RULES = Object.freeze({
 })
 
 export const DEMO_AGENTS = Object.freeze([
-  Object.freeze({ id: 'buyer-a', name: 'Buyer Agent A', bidMicro: 4n * MICRO_CCD, commitment: 'sha256:buyer-a-demo' }),
-  Object.freeze({ id: 'buyer-b', name: 'Buyer Agent B', bidMicro: 6n * MICRO_CCD, commitment: 'sha256:buyer-b-demo' }),
+  Object.freeze({ id: 'account-36pddm-jkfkyp', name: '账户 36pDdm…Jkfkyp', bidMicro: 4n * MICRO_CCD, commitment: 'sha256:account-36pddm-demo' }),
+  Object.freeze({ id: 'account-4jtmeo-5epu', name: '账户 4jTMeo…5ePU', bidMicro: 6n * MICRO_CCD, commitment: 'sha256:account-4jtmeo-demo' }),
 ])
 
 export class DemoRuleError extends Error {

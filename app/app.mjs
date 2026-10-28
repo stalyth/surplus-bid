@@ -31,7 +31,9 @@ let activity = []
 let walletConnection = null
 let observedWalletProvider = null
 let historicalEvidence = null
-let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, transactions: [], pending: null, busy: false, agentBusy: false }
+let serviceSpec = null
+let serviceSpecError = null
+let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, transactions: [], pending: null, busy: false, agentBusy: false, winnerVerification: null }
 
 const DEMO_SELLER_DECISION_INPUT = Object.freeze({
   dataLabel: 'demo data',
@@ -50,6 +52,11 @@ const elements = {
   auctionPhase: byId('auction-phase'),
   auctionId: byId('auction-id'),
   auctionDeadline: byId('auction-deadline'),
+  serviceSpecName: document.querySelector('[data-service-name]'),
+  serviceSpecCapacity: byId('service-spec-capacity'),
+  serviceSpecDelivery: byId('service-spec-delivery'),
+  serviceSpecHash: byId('service-spec-hash'),
+  serviceBindingStatus: byId('service-binding-status'),
   walletButton: byId('wallet-button'),
   walletStatus: byId('wallet-status'),
   walletAccountControl: byId('wallet-account-control'),
@@ -88,6 +95,12 @@ const elements = {
   activityLog: byId('activity-log'),
   evidenceSummary: byId('evidence-summary'),
   evidenceList: byId('evidence-list'),
+  evidenceBadge: byId('evidence-badge'),
+  settlementBreakdown: byId('settlement-breakdown'),
+  settlementBreakdownList: byId('settlement-breakdown-list'),
+  winnerVerification: byId('winner-verification'),
+  verifyWinnerButton: byId('verify-winner-button'),
+  winnerVerificationStatus: byId('winner-verification-status'),
   runtimeBanner: byId('runtime-banner'),
   runtimeModeBadge: byId('runtime-mode-badge'),
 }
@@ -229,7 +242,8 @@ elements.deployModuleButton.addEventListener('click', () => {
 elements.initContractButton.addEventListener('click', () => {
   runTestnetAction('init', async () => {
     const connection = transactionConnection()
-    const hash = await submitMarketInitialization(connection, testnet.status.moduleReference)
+    if (!serviceSpec?.hash) throw new ConcordiumClientError('SERVICE_SPEC_UNAVAILABLE', '容量规格尚未加载或摘要校验失败；未请求钱包创建实例。')
+    const hash = await submitMarketInitialization(connection, testnet.status.moduleReference, serviceSpec.hash)
     const sender = getTransactionSender(connection)
     testnet.pending = { kind: 'init', hash, sender }
     setTestnetStatus(`钱包已返回初始化交易哈希：${hash}\n交易创建的是 0 CCD 空实例，正在等待最终确认。`, 'success')
@@ -240,12 +254,41 @@ elements.initContractButton.addEventListener('click', () => {
     testnet.startPlan = null
     testnet.bidPlan = null
     testnet.sellerDecision = null
+    testnet.winnerVerification = null
     testnet.transactions = []
     trackVerifiedTransaction('创建容量窗口', verified.initialization)
     testnet.pending = null
     record(`Testnet 新实例 <${verified.initialization.address.index},${verified.initialization.address.subindex}> 已创建，并读回 view。`, 'chain')
     setTestnetStatus(formatInitializedStatus(verified.initialization, verified.view), 'success')
   })
+})
+
+elements.verifyWinnerButton.addEventListener('click', async () => {
+  if (!walletConnection || testnet.busy || !testnet.initialization) return
+  testnet.busy = true
+  testnet.winnerVerification = null
+  elements.winnerVerificationStatus.textContent = '正在读取 Testnet view 并核对链上赢家…'
+  elements.winnerVerificationStatus.dataset.tone = 'neutral'
+  render()
+  try {
+    const account = getTransactionSender(transactionConnection())
+    const result = await requestJson('/api/testnet/verify-winner', {
+      method: 'POST',
+      body: { account },
+    })
+    testnet.winnerVerification = result
+    elements.winnerVerificationStatus.textContent = result.eligible
+      ? `核验通过：${shortAccountAddress(result.account)} 与链上赢家一致。尚未签名、未发放 Token、未交付 API 额度。`
+      : `核验未通过：${result.reason}${result.winner ? ` 链上赢家为 ${shortAccountAddress(result.winner)}。` : ''}`
+    elements.winnerVerificationStatus.dataset.tone = result.eligible ? 'success' : 'error'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    elements.winnerVerificationStatus.textContent = `赢家核验未完成：${message}`
+    elements.winnerVerificationStatus.dataset.tone = 'error'
+  } finally {
+    testnet.busy = false
+    render()
+  }
 })
 
 elements.commitBidButton.addEventListener('click', () => {
@@ -406,6 +449,7 @@ async function runTestnetAction(kind, action) {
 }
 
 function render() {
+  renderServiceSpec()
   const livePhase = phaseName(testnet.view?.state?.phase)
   const liveWindow = testnet.initialization?.address
 
@@ -447,6 +491,66 @@ function render() {
   renderTestnet()
   renderActivity()
   renderEvidencePanel()
+  renderWinnerVerification()
+}
+
+function renderServiceSpec() {
+  if (!serviceSpec) {
+    elements.serviceSpecName.textContent = serviceSpecError ? '容量规格不可用' : '正在读取容量规格…'
+    elements.serviceSpecCapacity.textContent = '—'
+    elements.serviceSpecDelivery.textContent = '—'
+    elements.serviceSpecHash.textContent = '—'
+    elements.serviceBindingStatus.textContent = serviceSpecError ?? '正在计算 service-spec.json 的 SHA-256 摘要。'
+    elements.serviceBindingStatus.dataset.tone = serviceSpecError ? 'error' : 'neutral'
+    return
+  }
+  const { spec, hash } = serviceSpec
+  elements.serviceSpecName.textContent = spec.serviceName
+  elements.serviceSpecCapacity.textContent = `${spec.capacityUnits} 个容量单位`
+  elements.serviceSpecDelivery.textContent = spec.delivery.mode
+  elements.serviceSpecHash.textContent = `${hash.slice(0, 10)}…${hash.slice(-6)}`
+  elements.serviceSpecHash.title = hash
+  const chainServiceId = String(testnet.view?.state?.config?.service_id ?? '')
+  if (!testnet.initialization) {
+    elements.serviceBindingStatus.textContent = '创建新实例时会把此 SHA-256 摘要写入链上 service_id。'
+    elements.serviceBindingStatus.dataset.tone = 'neutral'
+  } else if (chainServiceId === hash) {
+    elements.serviceBindingStatus.textContent = '已核对：链上 service_id 与这份规格摘要一致。'
+    elements.serviceBindingStatus.dataset.tone = 'success'
+  } else {
+    elements.serviceBindingStatus.textContent = '不一致：当前实例并未绑定这份容量规格；不会用于赢家核验。'
+    elements.serviceBindingStatus.dataset.tone = 'error'
+  }
+}
+
+function serviceBindingMatches() {
+  return Boolean(
+    serviceSpec?.hash &&
+    testnet.initialization &&
+    String(testnet.view?.state?.config?.service_id ?? '') === serviceSpec.hash,
+  )
+}
+
+function renderWinnerVerification() {
+  const phase = phaseName(testnet.view?.state?.phase)
+  const visible = runtime.walletActions && testnet.initialization && ['Settled', 'NoSale'].includes(phase)
+  elements.winnerVerification.hidden = !visible
+  if (!visible) return
+  const bound = serviceBindingMatches()
+  const connected = walletConnection !== null
+  elements.verifyWinnerButton.disabled = !connected || !bound || testnet.busy
+  if (!bound) {
+    elements.winnerVerificationStatus.textContent = '当前实例的 service_id 与本地规格摘要不一致，拒绝进行赢家核验。'
+    elements.winnerVerificationStatus.dataset.tone = 'error'
+  } else if (!connected) {
+    elements.winnerVerificationStatus.textContent = '连接钱包后可只读核验当前账户是否是链上赢家。'
+    elements.winnerVerificationStatus.dataset.tone = 'neutral'
+  } else if (!testnet.winnerVerification) {
+    elements.winnerVerificationStatus.textContent = phase === 'NoSale'
+      ? '本轮未成交；可核验不会存在赢家。'
+      : '此操作只读 Testnet，不发起钱包签名或 API 调用。'
+    elements.winnerVerificationStatus.dataset.tone = 'neutral'
+  }
 }
 
 function renderRoundProgress() {
@@ -529,6 +633,7 @@ function renderTestnet() {
   const hasRound = testnet.round !== null
   const isInstanceSeller = hasInitialization && currentWalletAccount === testnet.initialization.sender
   const phase = phaseName(testnet.view?.state?.phase)
+  const serviceBound = serviceBindingMatches()
   const bidAddresses = new Set((testnet.view?.state?.bids ?? []).map((bid) => String(bid.bidder)))
   const selectedBidPlan = testnet.bidPlan ?? (hasInitialization && currentWalletAccount ? loadBidRevealBackup(testnet.initialization, currentWalletAccount) : null)
   const selectedBidAlreadyRevealed = hasRevealedBid(testnet.view, currentWalletAccount)
@@ -544,7 +649,7 @@ function renderTestnet() {
     (bidCount === 0 && now >= Number(testnet.round.commitEnd)) ||
     (bidCount > 0 && !reserveRevealed && now >= revealEnd)
   )
-  const canCreateReplacement = !hasInitialization || terminal || canCancel
+  const canCreateReplacement = !hasInitialization || phase === 'Idle' || terminal || canCancel
   const role = deriveAuctionRole({
     account: currentWalletAccount,
     initialization: testnet.initialization,
@@ -558,15 +663,15 @@ function renderTestnet() {
   elements.initContractButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || testnet.busy || !canCreateReplacement || testnet.pending !== null
   elements.readViewButton.disabled = !connected || !hasInitialization || testnet.busy || testnet.pending !== null
   const decisionReady = testnet.sellerDecision !== null && testnet.sellerDecision.final.action !== 'needs_human'
-  elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
+  elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !serviceBound || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
   elements.cancelRoundButton.disabled = !connected || !isInstanceSeller || !canCancel || testnet.busy || testnet.pending !== null
   elements.backupReserveButton.disabled = testnet.startPlan === null
-  const canCommitBid = connected && commitOpen && !isInstanceSeller && !bidAddresses.has(currentWalletAccount) && !testnet.busy && testnet.pending === null
+  const canCommitBid = connected && serviceBound && commitOpen && !isInstanceSeller && !bidAddresses.has(currentWalletAccount) && !testnet.busy && testnet.pending === null
   elements.bidAmountInput.disabled = !canCommitBid
   elements.commitBidButton.disabled = !canCommitBid
-  elements.revealReserveButton.disabled = !connected || !revealOpen || reserveRevealed || !isInstanceSeller || !testnet.startPlan || testnet.busy || testnet.pending !== null
-  elements.revealBidButton.disabled = !connected || !revealOpen || !selectedBidPlan || selectedBidAlreadyRevealed || testnet.busy || testnet.pending !== null
-  elements.finalizeChainButton.disabled = !connected || !finalizeOpen || testnet.busy || testnet.pending !== null
+  elements.revealReserveButton.disabled = !connected || !serviceBound || !revealOpen || reserveRevealed || !isInstanceSeller || !testnet.startPlan || testnet.busy || testnet.pending !== null
+  elements.revealBidButton.disabled = !connected || !serviceBound || !revealOpen || !selectedBidPlan || selectedBidAlreadyRevealed || testnet.busy || testnet.pending !== null
+  elements.finalizeChainButton.disabled = !connected || !serviceBound || !finalizeOpen || testnet.busy || testnet.pending !== null
 
   elements.sellerAgentCard.hidden = !connected || (hasInitialization && role !== 'seller')
   elements.sellerPublishActions.hidden = !connected || (hasInitialization && (!isInstanceSeller || (hasRound && !terminal && !canCancel)))
@@ -591,6 +696,7 @@ function renderTestnet() {
     revealOpen,
     finalizeOpen,
     terminal,
+    serviceBound,
     revealEnd: testnet.round?.revealEnd,
     reserveRevealed,
   })
@@ -612,7 +718,7 @@ function renderTestnet() {
   elements.finalizeChainButton.textContent = '按固定规则结算'
 }
 
-function renderRoleSummary({ connected, role, stageLabel, hasInitialization, hasRound, commitOpen, revealOpen, finalizeOpen, terminal, revealEnd, reserveRevealed }) {
+function renderRoleSummary({ connected, role, stageLabel, hasInitialization, hasRound, commitOpen, revealOpen, finalizeOpen, terminal, serviceBound, revealEnd, reserveRevealed }) {
   if (!connected) {
     elements.roleLabel.textContent = '观察者'
     elements.roleStage.textContent = '等待连接钱包'
@@ -632,6 +738,8 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
 
   if (!hasInitialization) {
     elements.roleGuidance.textContent = '当前尚无容量窗口。你可以作为卖家准备合约模块、创建实例，并在获得底价建议后发布。'
+  } else if (!serviceBound) {
+    elements.roleGuidance.textContent = '当前实例绑定的是旧规格摘要，不能继续发布或报价。它尚未开始且未锁定业务资金；请创建新的 0 CCD 容量窗口。'
   } else if (role === 'seller') {
     elements.roleGuidance.textContent = !hasRound
       ? '请获取 Seller Agent 的底价建议并确认发布；发布时会锁定 2 CCD 保证金。'
@@ -665,11 +773,14 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
 
 async function refreshTestnetStatus() {
   const status = await requestJson('/api/testnet/status')
+  const previousAddress = testnet.initialization?.address
   testnet.status = status
   testnet.deployment = status.deployment
   testnet.initialization = status.initialization
   testnet.round = status.round
   testnet.view = status.view
+  if (!sameInstance(previousAddress, status.initialization?.address)) testnet.winnerVerification = null
+  restoreContextEvidence(status)
   const restoredBackup = testnet.initialization ? loadReserveRevealBackup(testnet.initialization) : null
   if (restoredBackup) testnet.startPlan = restoredBackup
   if (testnet.initialization && walletConnection) testnet.bidPlan = loadBidRevealBackup(testnet.initialization, walletConnection.accounts[0])
@@ -677,6 +788,21 @@ async function refreshTestnetStatus() {
     formatStatusSummary(status),
     'success',
   )
+}
+
+function restoreContextEvidence(status) {
+  if (status.initialization?.hash) trackVerifiedTransaction('创建容量窗口', status.initialization)
+  if (!status.round?.hash || !status.round?.explorerUrl) return
+  const phase = phaseName(status.view?.state?.phase)
+  const label = phase === 'Settled' || phase === 'NoSale'
+    ? '链上结算'
+    : phase === 'Cancelled'
+    ? '取消并退款'
+    : '本轮链上状态确认'
+  trackVerifiedTransaction(label, {
+    hash: status.round.hash,
+    explorerUrl: status.round.explorerUrl,
+  })
 }
 
 async function waitForContractUpdate(hash, receiveName, amountMicroCcd, expected = {}) {
@@ -876,12 +1002,18 @@ async function loadLocalSessionHistory() {
   if (!runtime.walletActions) return
   try {
     const history = await requestJson('/api/session/history')
-    const entries = Array.isArray(history.entries) ? history.entries : []
-    activity = entries.filter((entry) => entry.kind === 'activity').map((entry) => ({
+    const legacyEntries = Array.isArray(history.entries) ? history.entries : []
+    const savedActivity = Array.isArray(history.activity)
+      ? history.activity
+      : legacyEntries.filter((entry) => entry.kind === 'activity')
+    const savedEvidence = Array.isArray(history.evidence)
+      ? history.evidence
+      : legacyEntries.filter((entry) => entry.kind === 'evidence')
+    activity = savedActivity.map((entry) => ({
       ...entry,
       time: formatLocalTime(entry.at),
     }))
-    testnet.transactions = entries.filter((entry) => entry.kind === 'evidence').map((entry) => ({
+    testnet.transactions = savedEvidence.map((entry) => ({
       label: entry.label,
       hash: entry.hash,
       explorerUrl: entry.explorerUrl,
@@ -937,6 +1069,27 @@ async function loadEvidence() {
   }
 }
 
+async function loadServiceSpec() {
+  try {
+    const response = await fetch('/service-spec.json', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const bytes = await response.arrayBuffer()
+    const spec = JSON.parse(new TextDecoder().decode(bytes))
+    if (
+      !spec || typeof spec.serviceName !== 'string' || !Number.isInteger(spec.capacityUnits) ||
+      !spec.delivery || typeof spec.delivery.mode !== 'string' || spec.delivery.mode.length === 0
+    ) throw new Error('缺少最小容量规格字段')
+    const digest = await crypto.subtle.digest('SHA-256', bytes)
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+    serviceSpec = { spec, hash }
+    serviceSpecError = null
+  } catch (error) {
+    serviceSpec = null
+    serviceSpecError = `读取 service-spec.json 失败：${error instanceof Error ? error.message : String(error)}`
+  }
+  render()
+}
+
 function renderEvidencePanel() {
   if (runtime.walletActions && testnet.initialization) {
     renderCurrentSessionEvidence()
@@ -951,9 +1104,12 @@ function renderCurrentSessionEvidence() {
   const entries = testnet.transactions.filter((item) => sameInstance(item.instance, initialization.address))
   const phase = phaseName(testnet.view?.state?.phase) || '未读回'
   const balance = testnet.view?.contractBalance ? `${testnet.view.contractBalance} CCD` : '未读回'
+  elements.evidenceBadge.textContent = entries.length > 0 ? `已核验 ${entries.length} 笔` : '尚无本地证据'
+  elements.evidenceBadge.className = `badge ${entries.length > 0 ? 'badge-success' : 'badge-warning'}`
   elements.evidenceSummary.dataset.tone = 'success'
-  elements.evidenceSummary.textContent = `本地完整模式 · 当前实例 ${address} · 本会话已核验 ${entries.length} 笔交易 · 链上阶段 ${phase} · 合约余额 ${balance}`
+  elements.evidenceSummary.textContent = `本地完整模式 · 当前实例 ${address} · 本地已核验 ${entries.length} 笔交易 · 链上阶段 ${phase} · 合约余额 ${balance}`
   renderEvidenceRows(entries, '本地确认时间')
+  renderSettlementBreakdown(testnet.view)
   if (entries.length === 0) {
     const empty = document.createElement('p')
     empty.className = 'evidence-empty'
@@ -970,30 +1126,79 @@ function renderHistoricalEvidence(evidence) {
   const round = evidence.currentCoreRound
   const address = `<${round.instance.address.index},${round.instance.address.subindex}>`
   elements.evidenceSummary.dataset.tone = 'neutral'
+  elements.evidenceBadge.textContent = '历史证据快照'
+  elements.evidenceBadge.className = 'badge badge-neutral'
   elements.evidenceSummary.textContent = `历史 Testnet 证据（旧顺序揭示协议）· 合约 ${address} · ${round.finalView.phase} · 成交价 ${formatMicroCcd(round.finalView.allocation.priceMicroCcd)} CCD · 合约余额 ${formatMicroCcd(round.finalView.contractBalanceMicroCcd)} CCD`
 
-  const labels = new Map([
-    ['initialization', '创建拍卖实例'],
-    ['startRound', '开始隐藏报价轮次'],
-    ['buyerACommit', '买家 A 提交承诺'],
-    ['buyerBCommit', '买家 B 提交承诺'],
-    ['sellerRevealReserve', '卖家揭示底价'],
-    ['buyerAReveal', '买家 A 揭示报价'],
-    ['finalize', '链上结算'],
-  ])
-
   const rows = Object.entries(round.transactions).map(([step, item]) => ({
-    label: labels.get(step) ?? step,
+    label: historicalTransactionLabel(step, item),
     hash: item.hash,
     explorerUrl: item.explorerUrl,
     confirmedAt: null,
   }))
   renderEvidenceRows(rows, '历史快照')
+  elements.settlementBreakdown.hidden = true
+}
+
+function historicalTransactionLabel(step, item) {
+  if (step === 'initialization') return '创建拍卖实例'
+  if (step === 'startRound') return '开始隐藏报价轮次'
+  if (step === 'sellerRevealReserve') return '卖家揭示底价'
+  if (step === 'finalize') return '链上结算'
+  const account = typeof item?.bidder === 'string' ? shortAccountAddress(item.bidder) : '未知账户'
+  if (step.startsWith('commitBidder')) return `${account} · 提交承诺`
+  if (step.startsWith('revealBidder')) return `${account} · 揭示报价`
+  return step
+}
+
+function renderSettlementBreakdown(view) {
+  const phase = phaseName(view?.state?.phase)
+  const allocations = Array.isArray(view?.state?.allocations) ? view.state.allocations : []
+  if (!['Settled', 'NoSale', 'Cancelled'].includes(phase) || allocations.length === 0) {
+    elements.settlementBreakdown.hidden = true
+    return
+  }
+  const toMicro = (value) => BigInt(value ?? 0)
+  const totalDeposited = toMicro(view.state.total_deposited)
+  const refunds = allocations.reduce((total, item) => total + toMicro(item.buyer_refund), 0n)
+  const platform = allocations.reduce((total, item) => total + toMicro(item.platform_receives), 0n)
+  const seller = totalDeposited - refunds - platform
+  const winner = allocations.find((item) => item.won === true)
+  const rows = [
+    ['链上总托管', `${formatMicroCcd(totalDeposited)} CCD`],
+    ['买家退款合计', `${formatMicroCcd(refunds)} CCD`],
+    ['平台所得', `${formatMicroCcd(platform)} CCD`],
+    ['卖家所得（总托管减退款与平台费）', `${formatMicroCcd(seller)} CCD`],
+  ]
+  if (winner) {
+    rows.splice(1, 0,
+      ['赢家', shortAccountAddress(String(winner.bidder))],
+      ['成交价', `${formatMicroCcd(toMicro(winner.price))} CCD`],
+      ['赢家平台费', `${formatMicroCcd(toMicro(winner.buyer_fee))} CCD`],
+      ['赢家退款', `${formatMicroCcd(toMicro(winner.buyer_refund))} CCD`],
+    )
+  } else {
+    rows.splice(1, 0, ['成交结果', phase === 'NoSale' ? '无合格报价' : '已取消'])
+  }
+  const reconciled = seller >= 0n && seller + refunds + platform === totalDeposited
+  rows.push(['资金核对', reconciled ? '通过：托管 = 卖家 + 平台 + 退款' : '未通过：请勿视为已核验', reconciled ? 'success' : 'error'])
+  elements.settlementBreakdownList.replaceChildren()
+  for (const [label, value, tone] of rows) {
+    const term = document.createElement('dt')
+    const description = document.createElement('dd')
+    term.textContent = label
+    description.textContent = value
+    if (tone) description.dataset.tone = tone
+    elements.settlementBreakdownList.append(term, description)
+  }
+  elements.settlementBreakdown.hidden = false
 }
 
 function renderEvidenceRows(rows, timeLabel) {
   elements.evidenceList.replaceChildren()
   for (const item of rows) {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'evidence-row'
     const row = document.createElement('a')
     row.href = item.explorerUrl
     row.target = '_blank'
@@ -1001,15 +1206,32 @@ function renderEvidenceRows(rows, timeLabel) {
     const label = document.createElement('span')
     const hash = document.createElement('code')
     const time = document.createElement('time')
-    const status = document.createElement('strong')
     label.textContent = item.label
     hash.textContent = `${item.hash.slice(0, 10)}…${item.hash.slice(-6)}`
     time.textContent = item.confirmedAt ? formatDate(item.confirmedAt) : timeLabel
     time.title = item.confirmedAt ? `${timeLabel}：${formatDate(item.confirmedAt)}` : timeLabel
-    status.textContent = 'Finalized ↗'
-    row.append(label, hash, time, status)
-    elements.evidenceList.append(row)
+    row.append(label, hash, time)
+    const copy = document.createElement('button')
+    copy.type = 'button'
+    copy.className = 'copy-hash'
+    copy.textContent = '复制哈希'
+    copy.title = item.hash
+    copy.addEventListener('click', () => { void copyTransactionHash(item.hash, copy) })
+    wrapper.append(row, copy)
+    elements.evidenceList.append(wrapper)
   }
+}
+
+async function copyTransactionHash(hash, button) {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+    await navigator.clipboard.writeText(hash)
+    button.textContent = '已复制'
+  } catch {
+    button.textContent = '复制失败'
+    button.title = `请手动复制：${hash}`
+  }
+  setTimeout(() => { button.textContent = '复制哈希' }, 1_800)
 }
 
 async function loadAgentEvaluation() {
@@ -1091,5 +1313,6 @@ function byId(id) {
 renderRuntimeMode()
 render()
 void loadLocalSessionHistory()
+void loadServiceSpec()
 loadEvidence()
 loadAgentEvaluation()

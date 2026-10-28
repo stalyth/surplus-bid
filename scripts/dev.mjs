@@ -29,6 +29,7 @@ const contractName = ContractName.fromString('surplus_bid')
 const platformAddress = '4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4'
 const protocolVersion = 'shared-reveal-v2'
 const sessionHistoryPath = resolve(repoRoot, 'runtime', 'session-activity.json')
+const serviceSpecPath = resolve(repoRoot, 'public', 'service-spec.json')
 const testnetClient = new ConcordiumGRPCNodeClient(
   'grpc.testnet.concordium.com', 20_000, credentials.createSsl(), { timeout: 10_000 },
 )
@@ -64,6 +65,12 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/runtime-config.json') {
       sendJson(response, 200, { mode: 'local-live', agentApi: true, walletActions: true })
+      return
+    }
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/service-spec.json') {
+      const source = readFileSync(serviceSpecPath)
+      response.writeHead(200, { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff' })
+      response.end(request.method === 'HEAD' ? undefined : source)
       return
     }
     if (request.method === 'POST' && url.pathname === '/api/agent/decide') {
@@ -141,18 +148,17 @@ async function handleSessionApi(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/api/session/activity') {
     const entry = validateActivityEntry(await readJson(request))
     const history = readSessionHistory()
-    history.entries.unshift({ kind: 'activity', ...entry })
-    history.entries = history.entries.slice(0, 10)
+    history.activity = [entry, ...history.activity].slice(0, 10)
     writeSessionHistory(history)
-    sendJson(response, 200, { ok: true, count: history.entries.length })
+    sendJson(response, 200, { ok: true, count: history.activity.length })
     return
   }
   if (request.method === 'POST' && url.pathname === '/api/session/evidence') {
     const entry = validateEvidenceEntry(await readJson(request))
     const history = readSessionHistory()
-    history.entries = [{ kind: 'evidence', ...entry }, ...history.entries.filter((item) => item.kind !== 'evidence' || item.hash !== entry.hash)].slice(0, 10)
+    history.evidence = [entry, ...history.evidence.filter((item) => item.hash !== entry.hash)].slice(0, 10)
     writeSessionHistory(history)
-    sendJson(response, 200, { ok: true, count: history.entries.length })
+    sendJson(response, 200, { ok: true, count: history.evidence.length })
     return
   }
   sendJson(response, 405, { ok: false, error: 'Unsupported local session endpoint.' })
@@ -161,12 +167,22 @@ async function handleSessionApi(request, response, url) {
 function readSessionHistory() {
   try {
     const parsed = JSON.parse(readFileSync(sessionHistoryPath, 'utf8'))
+    // Version 1 used one shared ten-entry array. Preserve it while splitting
+    // activity from chain evidence, so a noisy wallet session cannot evict a
+    // finalized transaction hash.
+    const legacyEntries = Array.isArray(parsed.entries) ? parsed.entries : []
     return {
-      version: 1,
-      entries: Array.isArray(parsed.entries) ? parsed.entries.slice(0, 10) : [],
+      version: 2,
+      activity: Array.isArray(parsed.activity)
+        ? parsed.activity.slice(0, 10)
+        : legacyEntries.filter((item) => item?.kind === 'activity').slice(0, 10),
+      evidence: Array.isArray(parsed.evidence)
+        ? parsed.evidence.slice(0, 10)
+        : legacyEntries.filter((item) => item?.kind === 'evidence').slice(0, 10),
+      current: normalizeStoredVerification(parsed.current),
     }
   } catch {
-    return { version: 1, entries: [] }
+    return { version: 2, activity: [], evidence: [], current: null }
   }
 }
 
@@ -204,12 +220,73 @@ function validateEvidenceEntry(value) {
   return { at: new Date().toISOString(), label: value.label, hash, explorerUrl: expectedUrl, instance: { index, subindex } }
 }
 
+function normalizeStoredVerification(value) {
+  if (!value || typeof value !== 'object' || !value.initialization) return null
+  const initialization = value.initialization
+  const address = initialization.address
+  if (
+    typeof initialization.hash !== 'string' || !/^[0-9a-f]{64}$/i.test(initialization.hash) ||
+    typeof initialization.sender !== 'string' || !address || !/^\d+$/.test(String(address.index)) || !/^\d+$/.test(String(address.subindex))
+  ) return null
+  try {
+    parseAccount(initialization.sender)
+  } catch {
+    return null
+  }
+  const normalizedAddress = { index: String(address.index), subindex: String(address.subindex) }
+  const contractUrl = `https://ccdexplorer.io/testnet/contract/${normalizedAddress.index}/${normalizedAddress.subindex}`
+  return {
+    deployment: value.deployment && typeof value.deployment === 'object' ? value.deployment : null,
+    initialization: {
+      hash: initialization.hash.toLowerCase(),
+      sender: initialization.sender,
+      address: normalizedAddress,
+      blockHash: initialization.blockHash ?? null,
+      explorerUrl: `https://ccdexplorer.io/testnet/transaction/${initialization.hash.toLowerCase()}`,
+      contractUrl,
+    },
+    round: value.round && typeof value.round === 'object' ? value.round : null,
+  }
+}
+
+function persistVerifiedContext() {
+  const history = readSessionHistory()
+  history.current = {
+    deployment: verified.deployment,
+    initialization: verified.initialization,
+    round: verified.round,
+  }
+  writeSessionHistory(history)
+}
+
+function persistVerifiedEvidence(label, hash) {
+  if (!verified.initialization || typeof hash !== 'string' || !/^[0-9a-f]{64}$/i.test(hash)) return
+  const history = readSessionHistory()
+  const entry = {
+    at: new Date().toISOString(),
+    label,
+    hash: hash.toLowerCase(),
+    explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash.toLowerCase()}`,
+    instance: { ...verified.initialization.address },
+  }
+  history.evidence = [entry, ...history.evidence.filter((item) => item.hash !== entry.hash)].slice(0, 10)
+  history.current = {
+    deployment: verified.deployment,
+    initialization: verified.initialization,
+    round: verified.round,
+  }
+  writeSessionHistory(history)
+}
+
 async function handleTestnetApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/testnet/status') {
     const artifactStatus = inspectArtifacts()
     const consensus = await getTestnetConsensus()
     const view = artifactStatus.ready && verified.initialization ? await readInitializedState() : null
-    if (view) restoreObservedRound(view)
+    if (view) {
+      restoreObservedRound(view)
+      persistVerifiedContext()
+    }
     sendJson(response, 200, {
       ok: true,
       network: 'Concordium Testnet',
@@ -218,6 +295,7 @@ async function handleTestnetApi(request, response, url) {
       contractIssue: artifactStatus.issue,
       protocolVersion,
       contractName: 'surplus_bid',
+      serviceSpec: inspectServiceSpec(),
       platformAddress,
       lastFinalizedBlock: String(consensus.lastFinalizedBlock),
       deployment: verified.deployment,
@@ -241,6 +319,10 @@ async function handleTestnetApi(request, response, url) {
   }
   if (request.method === 'POST' && url.pathname === '/api/testnet/verify-cancel-round') {
     sendJson(response, 200, { ok: true, ...await verifyCancelRound(await readJson(request)) })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/testnet/verify-winner') {
+    sendJson(response, 200, { ok: true, ...await verifyWinner(await readJson(request)) })
     return
   }
   if (request.method === 'POST' && url.pathname === '/api/testnet/verify-update') {
@@ -275,6 +357,7 @@ async function verifyDeployment({ hash, sender }) {
     blockHash: String(outcome.blockHash),
     explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
   }
+  persistVerifiedContext()
   return { final: true, deployment: verified.deployment }
 }
 
@@ -311,7 +394,37 @@ async function verifyInitialization({ hash, sender }) {
     explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
     contractUrl: `https://ccdexplorer.io/testnet/contract/${address.index}/${address.subindex}`,
   }
-  return { final: true, initialization: verified.initialization, view: await readInitializedState() }
+  const view = await readInitializedState()
+  verifyServiceBinding(view)
+  persistVerifiedEvidence('创建容量窗口', hash)
+  return { final: true, initialization: verified.initialization, view }
+}
+
+async function verifyWinner({ account }) {
+  if (!verified.initialization) throw new Error('没有已核验的容量窗口，无法核验赢家。')
+  const requested = AccountAddress.toBase58(parseAccount(account))
+  const view = await readInitializedState()
+  verifyServiceBinding(view)
+  const phase = variantName(view.state.phase)
+  if (phase !== 'Settled') {
+    return {
+      eligible: false,
+      reason: phase === 'NoSale' ? '本轮没有合格报价，未产生赢家。' : `本轮尚未结算（当前阶段：${phase}）。`,
+      phase,
+      serviceId: loadServiceSpec().hash,
+    }
+  }
+  const winner = (Array.isArray(view.state.allocations) ? view.state.allocations : []).find((item) => item.won === true)
+  if (!winner?.bidder) throw new Error('链上结算状态缺少赢家分配，无法核验。')
+  const winnerAccount = AccountAddress.toBase58(parseAccount(String(winner.bidder)))
+  return {
+    eligible: requested === winnerAccount,
+    reason: requested === winnerAccount ? '当前账户与链上赢家一致。' : '当前账户不是该轮链上赢家。',
+    phase,
+    account: requested,
+    winner: winnerAccount,
+    serviceId: loadServiceSpec().hash,
+  }
 }
 
 async function verifyStartRound({ hash, sender, plan }) {
@@ -364,6 +477,7 @@ async function verifyStartRound({ hash, sender, plan }) {
     blockHash: String(outcome.blockHash),
     explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
   }
+  persistVerifiedEvidence('开始隐藏报价轮次', hash)
   return { final: true, round: verified.round, view }
 }
 
@@ -399,6 +513,7 @@ async function verifyCancelRound({ hash, sender }) {
     phase,
     explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
   }
+  persistVerifiedEvidence('取消并退款', hash)
   return { final: true, round: verified.round, view }
 }
 
@@ -424,6 +539,13 @@ async function verifyContractUpdate({ hash, sender, receiveName, amountMicroCcd,
   const view = await readInitializedState()
   verifyUpdateState(receiveName, view, sender, expected)
   restoreObservedRound(view)
+  const label = new Map([
+    ['surplus_bid.commit_bid', '买家提交隐藏承诺'],
+    ['surplus_bid.reveal_reserve', '卖家揭示底价'],
+    ['surplus_bid.reveal_bid', '买家揭示报价'],
+    ['surplus_bid.finalize', '链上结算'],
+  ]).get(receiveName) ?? receiveName
+  persistVerifiedEvidence(label, hash)
   return {
     final: true,
     view,
@@ -559,11 +681,56 @@ function inspectArtifacts() {
   }
 }
 
+function loadServiceSpec() {
+  const bytes = readFileSync(serviceSpecPath)
+  let spec
+  try {
+    spec = JSON.parse(bytes.toString('utf8'))
+  } catch {
+    throw new Error('service-spec.json 不是有效 JSON。')
+  }
+  if (
+    !spec || typeof spec !== 'object' || typeof spec.serviceName !== 'string' || spec.serviceName.length === 0 ||
+    !Number.isInteger(spec.capacityUnits) || spec.capacityUnits < 1 ||
+    !spec.delivery || typeof spec.delivery !== 'object' || typeof spec.delivery.mode !== 'string' || spec.delivery.mode.length === 0
+  ) throw new Error('service-spec.json 缺少最小容量规格字段。')
+  return { hash: createHash('sha256').update(bytes).digest('hex'), spec }
+}
+
+function inspectServiceSpec() {
+  try {
+    const { hash, spec } = loadServiceSpec()
+    return { ready: true, hash, spec, issue: null }
+  } catch (error) {
+    return { ready: false, hash: null, spec: null, issue: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+function verifyServiceBinding(view) {
+  const { hash } = loadServiceSpec()
+  const serviceId = String(view?.state?.config?.service_id ?? '')
+  if (serviceId !== hash) {
+    throw new Error('当前实例的链上 service_id 与本地 service-spec.json 摘要不一致；不会将其视为本规格的容量窗口。')
+  }
+}
+
 function loadRecordedVerification() {
   try {
     const artifact = loadArtifacts()
+    const local = normalizeStoredVerification(readSessionHistory().current)
+    if (local) {
+      if (local.deployment?.moduleReference && local.deployment.moduleReference !== artifact.moduleReference) {
+        local.deployment = null
+      }
+      return local
+    }
     const evidence = JSON.parse(readFileSync(resolve(repoRoot, 'public/evidence/sealed-auction-testnet.json'), 'utf8'))
-    if (evidence.module?.reference !== artifact.moduleReference) throw new Error('记录的模块引用与当前 Wasm 不一致。')
+    // The committed public snapshot documents an older protocol and remains
+    // useful for the read-only page, but must never become the live instance
+    // context for the current Wasm.
+    if (evidence.module?.reference !== artifact.moduleReference) {
+      return { deployment: null, initialization: null, round: null }
+    }
     const current = evidence.currentCoreRound
     const address = current?.instance?.address ?? evidence.instance?.address
     const initialization = current?.transactions?.initialization ?? evidence.instance?.initialization

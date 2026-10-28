@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "serviceName": "Priority AI Analysis",
+  "capacityUnits": 1,
+  "delivery": {
+    "mode": "This demo ends after on-chain settlement and winner-address verification."
+  },
+  "scope": "A short-lived priority execution capacity window for this demo.",
+  "limitations": "Demo only. No production AI model, SLA, or service-quality guarantee is represented."
+}

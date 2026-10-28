@@ -30,7 +30,7 @@
         "receiveName": "surplus_bid.start_round",
         "amountMicroCcd": "2000000"
       },
-      "buyerACommit": {
+      "commitBidder36pDdm": {
         "hash": "70a9bfbfef05a4354ccc1bd8976e719831fbddf0f2c8508054f58c2c9ae0c833",
         "explorerUrl": "https://ccdexplorer.io/testnet/transaction/70a9bfbfef05a4354ccc1bd8976e719831fbddf0f2c8508054f58c2c9ae0c833",
         "receiveName": "surplus_bid.commit_bid",
@@ -38,7 +38,7 @@
         "sequence": 0,
         "amountMicroCcd": "2000000"
       },
-      "buyerBCommit": {
+      "commitBidder4jTMeo": {
         "hash": "4c22334c12994b37945f8b96af15cca76c92eeb28ccc0799a45ebb8f75c85ea8",
         "explorerUrl": "https://ccdexplorer.io/testnet/transaction/4c22334c12994b37945f8b96af15cca76c92eeb28ccc0799a45ebb8f75c85ea8",
         "receiveName": "surplus_bid.commit_bid",
@@ -53,7 +53,7 @@
         "amountMicroCcd": "0",
         "reserveMicroCcd": "2000000"
       },
-      "buyerAReveal": {
+      "revealBidder36pDdm": {
         "hash": "2451df269a96eb95374d96eb9b522a94f1ebec02abb760095579b13523efb218",
         "explorerUrl": "https://ccdexplorer.io/testnet/transaction/2451df269a96eb95374d96eb9b522a94f1ebec02abb760095579b13523efb218",
         "receiveName": "surplus_bid.reveal_bid",
@@ -73,8 +73,10 @@
       "contractBalanceMicroCcd": "0",
       "totalDepositedMicroCcd": "8000000",
       "reserveMicroCcd": "2000000",
-      "buyerA": { "escrowMicroCcd": "4000000", "revealedBidMicroCcd": "4000000", "sequence": 0 },
-      "buyerB": { "escrowMicroCcd": "2000000", "revealedBidMicroCcd": null, "sequence": 1 },
+      "bids": [
+        { "bidder": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp", "escrowMicroCcd": "4000000", "revealedBidMicroCcd": "4000000", "sequence": 0 },
+        { "bidder": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU", "escrowMicroCcd": "2000000", "revealedBidMicroCcd": null, "sequence": 1 }
+      ],
       "allocation": {
         "winner": "36pDdmDey4q2iDGTUa4ZgVGybT4khHsCwv2ztLhn188vJkfkyp",
         "winningBidMicroCcd": "4000000",
@@ -85,12 +87,12 @@
         "platformFeeMicroCcd": "200000"
       },
       "sellerTotalMicroCcd": "6900000",
-      "sellerTotalExplanation": "seller guarantee 2000000 + settlement 2900000 + buyer B unrevealed escrow 2000000",
-      "reconciliation": "8000000 = buyer A refund 900000 + seller total 6900000 + platform fee 200000"
+      "sellerTotalExplanation": "seller guarantee 2000000 + settlement 2900000 + unrevealed escrow from 4jTMeo…5ePU 2000000",
+      "reconciliation": "8000000 = refund to 36pDdm…Jkfkyp 900000 + seller total 6900000 + platform fee 200000"
     }
   },
   "limitations": [
-    "Buyer B committed but did not reveal. This round validates the contract's unrevealed-bid forfeiture path; it is not evidence of two revealed bids competing for allocation.",
+    "Account 4jTMeo…5ePU committed but did not reveal. This round validates the contract's unrevealed-bid forfeiture path; it is not evidence of two revealed bids competing for allocation.",
     "The data proves Testnet CCD execution and public state only. The fixed service identifier and bids are demonstration inputs, not proof of off-chain delivery.",
     "Network transaction fees are paid separately by transaction senders and are not part of the contract reconciliation above."
   ],

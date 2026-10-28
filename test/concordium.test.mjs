@@ -11,6 +11,7 @@ import {
   assertTransactionHash,
   assertConcordiumTestnet,
   connectConcordiumWallet,
+  createMarketInitializationParams,
   deriveAuctionRole,
   getTransactionSender,
   hasRevealedBid,
@@ -50,6 +51,19 @@ test('shortens a public account address for the connected-wallet status', () => 
 test('uses the confirmed 2 CCD guarantee and platform account for initialization', () => {
   assert.equal(INITIAL_MARKET.guarantee, '2000000')
   assert.equal(INITIAL_MARKET.fee_recipient, PLATFORM_ACCOUNT)
+})
+
+test('binds initialization to a 64-character service specification digest', () => {
+  const digest = 'ab'.repeat(32)
+  assert.deepEqual(createMarketInitializationParams(digest), {
+    service_id: digest,
+    guarantee: '2000000',
+    fee_recipient: PLATFORM_ACCOUNT,
+  })
+  assert.throws(
+    () => createMarketInitializationParams('not-a-digest'),
+    (error) => error instanceof ConcordiumClientError && error.code === 'INVALID_SERVICE_SPEC',
+  )
 })
 
 test('rejects a missing wallet transaction hash before Testnet verification', () => {
@@ -101,7 +115,7 @@ test('an explicit connect lists authorized accounts even when the recent account
   }
 })
 
-test('explicitly selected buyer B remains the transaction sender after authorization refresh', async () => {
+test('explicitly selected authorized account remains the transaction sender after authorization refresh', async () => {
   const buyerA = INSTANCE.sender
   const buyerB = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
   const originalWindow = globalThis.window

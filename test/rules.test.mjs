@@ -29,16 +29,16 @@ test('commit-reveal demo settles two buyers and conserves seller and buyer depos
   const before = readyAuction()
   assert.equal(contractBalanceMicro(before), 12n * MICRO_CCD)
   const auction = finalizeDemoAuction(before)
-  const buyerA = auction.settlement.allocations.find((item) => item.agentId === 'buyer-a')
-  const buyerB = auction.settlement.allocations.find((item) => item.agentId === 'buyer-b')
+  const firstAccount = auction.settlement.allocations.find((item) => item.agentId === 'account-36pddm-jkfkyp')
+  const secondAccount = auction.settlement.allocations.find((item) => item.agentId === 'account-4jtmeo-5epu')
   assert.equal(auction.phase, 'Finalized')
-  assert.equal(buyerA.refundMicro, 4n * MICRO_CCD)
-  assert.equal(buyerB.priceMicro, 4n * MICRO_CCD)
-  assert.equal(buyerB.refundMicro, 1_800_000n)
+  assert.equal(firstAccount.refundMicro, 4n * MICRO_CCD)
+  assert.equal(secondAccount.priceMicro, 4n * MICRO_CCD)
+  assert.equal(secondAccount.refundMicro, 1_800_000n)
   assert.equal(auction.settlement.sellerReceivesMicro, 3_800_000n)
   assert.equal(auction.settlement.platformReceivesMicro, 400_000n)
   assert.equal(contractBalanceMicro(auction), 0n)
-  const distributed = buyerA.refundMicro + buyerB.refundMicro +
+  const distributed = firstAccount.refundMicro + secondAccount.refundMicro +
     auction.settlement.sellerReceivesMicro + auction.settlement.platformReceivesMicro +
     auction.settlement.sellerGuaranteeRefundMicro
   assert.equal(distributed, 12n * MICRO_CCD)

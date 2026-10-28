@@ -2,7 +2,6 @@ export const CONCORDIUM_TESTNET_GENESIS_HASH =
   '4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796'
 export const PLATFORM_ACCOUNT = '4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4'
 export const INITIAL_MARKET = Object.freeze({
-  service_id: 'surplus-bid-w2d2',
   guarantee: '2000000',
   fee_recipient: PLATFORM_ACCOUNT,
 })
@@ -175,7 +174,14 @@ export async function submitModuleDeployment(connection, { timeoutMs = 120_000 }
   return assertTransactionHash(hash)
 }
 
-export async function submitMarketInitialization(connection, moduleReference, { timeoutMs = 120_000 } = {}) {
+export function createMarketInitializationParams(serviceId) {
+  if (typeof serviceId !== 'string' || !/^[0-9a-f]{64}$/i.test(serviceId)) {
+    throw new ConcordiumClientError('INVALID_SERVICE_SPEC', '容量规格摘要无效；未请求钱包创建实例。')
+  }
+  return { ...INITIAL_MARKET, service_id: serviceId.toLowerCase() }
+}
+
+export async function submitMarketInitialization(connection, moduleReference, serviceId, { timeoutMs = 120_000 } = {}) {
   const sdk = requireTransactionSdk()
   if (typeof moduleReference !== 'string' || !/^[0-9a-f]{64}$/i.test(moduleReference)) {
     throw new ConcordiumClientError('INVALID_MODULE_REFERENCE', '部署模块引用无效，无法创建实例。')
@@ -186,6 +192,7 @@ export async function submitMarketInitialization(connection, moduleReference, { 
     throw new ConcordiumClientError('SCHEMA_UNAVAILABLE', '无法读取当前合约 schema。请先运行 pnpm check。')
   }
   const schemaBase64 = bytesToBase64(new Uint8Array(await response.arrayBuffer()))
+  const initParams = createMarketInitializationParams(serviceId)
   const payload = {
     amount: sdk.CcdAmount.fromCcd(0),
     moduleRef: sdk.ModuleReference.fromHexString(moduleReference),
@@ -197,7 +204,7 @@ export async function submitMarketInitialization(connection, moduleReference, { 
       connection.accounts[0],
       sdk.AccountTransactionType.InitContract,
       payload,
-      INITIAL_MARKET,
+      initParams,
       schemaBase64,
     ),
     timeoutMs,

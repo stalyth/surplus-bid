@@ -23,6 +23,7 @@ await Promise.all([
   copy('app/app.mjs', 'dist/app/app.mjs'),
   copy('src/concordium.mjs', 'dist/src/concordium.mjs'),
   copy('src/rules.mjs', 'dist/src/rules.mjs'),
+  copy('public/service-spec.json', 'dist/service-spec.json'),
   copyTree('public/evidence', 'dist/evidence'),
   copy('node_modules/@concordium/web-sdk/lib/min/concordium.web.min.js', 'dist/vendor/concordium.web.min.js'),
   copy('contracts/sealed-auction/module.wasm.v1', 'dist/artifacts/module.wasm.v1'),

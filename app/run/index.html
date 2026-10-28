@@ -33,16 +33,16 @@
         <p class="eyebrow">SurplusBid market · Concordium Testnet</p>
         <h1>分配即将过期的<br />AI API 容量。</h1>
         <p class="hero-copy">
-          一个标准化容量窗口，两个 Buyer Agent 的隐藏报价，以及由 Concordium 合约执行的赢家选择、CCD 结算与退款。交易剩余按预先公开的规则在参与方之间分配。
+          一个标准化容量窗口，最多两个买家账户的隐藏报价，以及由 Concordium 合约执行的赢家选择、CCD 结算与退款。交易剩余按预先公开的规则在参与方之间分配。
         </p>
         <div class="capacity-highlights" aria-label="当前容量窗口摘要">
           <div><span>本轮容量</span><strong>1 个优先执行名额</strong></div>
-          <div><span>交付入口</span><strong>目标：Demo Gateway · 3 次额度</strong></div>
+          <div><span>完成边界</span><strong>链上赢家地址核验</strong></div>
           <div><span>报价机制</span><strong>Commit-reveal 隐藏报价</strong></div>
         </div>
         <div class="truth-banner" role="note">
           <strong>交付边界</strong>
-          <span>本页已能完成 Testnet 拍卖与 CCD 结算。Demo Capacity Gateway 尚在接入中；在它完成钱包消息签名和链上赢家核验前，本页不会声称已经交付生产 AI 服务。</span>
+          <span>本次演示在 Testnet 拍卖、CCD 结算和链上赢家地址核验后结束。不接入 Demo Capacity Gateway，不发 Token，也不演示 API 调用或生产服务交付。</span>
         </div>
       </section>
 
@@ -77,6 +77,18 @@
               <code>price = reserve + floor(surplus / 2)</code>
               <span>平台费：交易剩余的 10%，买卖双方均摊；低于成交价 10% 时免收</span>
             </div>
+
+            <section class="service-spec-card" aria-labelledby="service-spec-title">
+              <div class="panel-kicker"><span>链</span> 容量规格绑定</div>
+              <h4 id="service-spec-title" data-service-name>正在读取规格…</h4>
+              <dl>
+                <div><dt>容量</dt><dd id="service-spec-capacity">—</dd></div>
+                <div><dt>交付</dt><dd id="service-spec-delivery">—</dd></div>
+                <div><dt>规格指纹</dt><dd><code id="service-spec-hash">正在计算…</code></dd></div>
+              </dl>
+              <p id="service-binding-status">新实例创建时会把这份规格的 SHA-256 摘要写入链上 service_id。</p>
+              <a href="/service-spec.json" target="_blank" rel="noreferrer">查看 service-spec.json ↗</a>
+            </section>
 
             <div class="meta-list">
               <div><span>钱包状态</span><strong id="wallet-status">未连接</strong></div>
@@ -155,13 +167,23 @@
           </article>
 
           <article class="panel evidence-panel">
-            <div class="panel-kicker"><span>04</span> 交付与公开证据</div>
+            <div class="panel-kicker"><span>04</span> 结算与公开证据</div>
             <div class="panel-title-row">
-              <div><h3>链上结算可独立核验</h3><p>每笔已记录的 Testnet 交易均可在 CCDExplorer 打开。Demo Capacity Gateway 会在下一步接入：仅中标账户可用钱包消息签名激活 3 次演示调用额度。</p></div>
-              <span class="badge badge-success">当前证据已记录</span>
+              <div><h3>链上结算可独立核验</h3><p>每笔已记录的 Testnet 交易均可在 CCDExplorer 打开。演示以“规格摘要一致、结算完成、赢家地址匹配”为止，不提供链下 API 交付。</p></div>
+              <span class="badge badge-neutral" id="evidence-badge">等待链上核验</span>
             </div>
             <div class="evidence-summary" id="evidence-summary">正在读取仓库中的 Testnet 证据…</div>
             <div class="evidence-list" id="evidence-list"></div>
+            <section class="winner-verification" id="winner-verification" hidden aria-live="polite">
+              <h4>链上赢家核验</h4>
+              <p>读取已结算实例的 <code>view</code>，核对当前账户是否等于链上赢家，同时核对容量规格摘要。此步骤不签名、不发 Token，也不代表 API 已交付。</p>
+              <button class="button button-secondary" id="verify-winner-button" type="button" disabled>核验当前账户</button>
+              <div class="testnet-status" id="winner-verification-status">结算后可进行只读核验。</div>
+            </section>
+            <section class="settlement-breakdown" id="settlement-breakdown" hidden aria-live="polite">
+              <h4>本轮结算核对</h4>
+              <dl id="settlement-breakdown-list"></dl>
+            </section>
             <p class="todo">公开构建只读取脱敏证据快照；不会要求钱包连接，也不会伪装成本地动态交付服务。</p>
           </article>
         </div>
@@ -170,7 +192,7 @@
       <section class="activity" aria-labelledby="activity-title">
         <div class="section-heading compact">
           <div><p class="eyebrow">Session activity</p><h2 id="activity-title">本次交易操作记录</h2></div>
-          <span class="badge badge-neutral">仅当前浏览器会话</span>
+          <span class="badge badge-neutral">本地保留最近 10 条</span>
         </div>
         <ol id="activity-log" class="activity-log">
           <li><time>等待</time><span>钱包和链上操作会在这里按时间记录。</span><em>placeholder</em></li>
