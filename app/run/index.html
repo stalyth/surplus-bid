@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="SurplusBid allocates a standardized window of expiring AI API capacity through a sealed-bid auction on Concordium Testnet."
+      content="SurplusBid is a repeated sealed-bid market for standardized, expiring AI API capacity on Concordium Testnet."
     />
     <title>SurplusBid · Capacity window</title>
     <link rel="stylesheet" href="/app/styles.css" />
@@ -27,36 +27,31 @@
     </header>
 
     <main id="top">
-      <div class="runtime-banner" id="runtime-banner" role="status">正在读取运行模式…</div>
       <div class="wallet-account-notice" id="wallet-account-notice" role="status" hidden></div>
       <section class="hero product-hero">
         <p class="eyebrow">SurplusBid market · Concordium Testnet</p>
-        <h1>分配即将过期的<br />AI API 容量。</h1>
+        <h1>发现容量价格，<br />分享交易剩余。</h1>
         <p class="hero-copy">
-          一个标准化容量窗口，最多两个买家账户的隐藏报价，以及由 Concordium 合约执行的赢家选择、CCD 结算与退款。交易剩余按预先公开的规则在参与方之间分配。
+          一个持续运行的标准化容量市场。买家以隐藏报价表达需求，Concordium 合约执行赢家选择、CCD 结算与退款；成交记录为后续容量窗口提供价格信号，交易剩余则按公开规则由参与方分享。
         </p>
-        <div class="capacity-highlights" aria-label="当前容量窗口摘要">
-          <div><span>本轮容量</span><strong>1 个优先执行名额</strong></div>
-          <div><span>完成边界</span><strong>链上赢家地址核验</strong></div>
+        <div class="capacity-highlights" aria-label="容量市场摘要">
+          <div><span>当前窗口供给</span><strong>1 个优先执行名额</strong></div>
+          <div><span>价格信号</span><strong>来自已确认成交记录</strong></div>
           <div><span>报价机制</span><strong>Commit-reveal 隐藏报价</strong></div>
-        </div>
-        <div class="truth-banner" role="note">
-          <strong>交付边界</strong>
-          <span>本次演示在 Testnet 拍卖、CCD 结算和链上赢家地址核验后结束。不接入 Demo Capacity Gateway，不发 Token，也不演示 API 调用或生产服务交付。</span>
         </div>
       </section>
 
       <section class="flow-shell" aria-labelledby="flow-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Current capacity window</p>
-            <h2 id="flow-title">进入这一轮容量交易</h2>
+            <p class="eyebrow">Capacity market</p>
+            <h2 id="flow-title">进入容量市场</h2>
           </div>
         </div>
 
         <div class="workflow-grid">
           <article class="panel rules-panel">
-            <div class="panel-kicker"><span>01</span> 本轮出售的容量</div>
+            <div class="panel-kicker"><span>01</span> 市场提供的标准化容量</div>
             <div class="panel-title-row">
               <div>
                 <h3>Priority AI Analysis</h3>
@@ -73,7 +68,7 @@
             </dl>
 
             <div class="formula-card">
-              <span>本轮固定定价规则</span>
+              <span>公开结算与交易剩余分配规则</span>
               <code>price = reserve + floor(surplus / 2)</code>
               <span>平台费：交易剩余的 10%，买卖双方均摊；低于成交价 10% 时免收</span>
             </div>
@@ -92,13 +87,13 @@
 
             <div class="meta-list">
               <div><span>钱包状态</span><strong id="wallet-status">未连接</strong></div>
-              <div><span>链上容量窗口</span><strong id="auction-id">等待卖家发布</strong></div>
+              <div><span>当前清算窗口</span><strong id="auction-id">等待卖家发布</strong></div>
               <div><span>当前承诺截止</span><strong id="auction-deadline">发布后显示</strong></div>
             </div>
 
             <div class="seller-agent-card" id="seller-agent-card">
               <div class="panel-kicker"><span>AI</span> Seller Agent 建议</div>
-              <p>Seller Agent 根据已确认的历史提出下一轮底价。代码会核验涨幅、供给变化与交易剩余约束；卖家始终在钱包中确认发布。</p>
+              <p>Seller Agent 根据已确认的历史提出下一清算窗口的底价。代码会核验涨幅、供给变化与交易剩余约束；卖家始终在钱包中确认发布。</p>
               <button class="button button-secondary" id="seller-decision-button" type="button">获取底价建议</button>
               <div class="testnet-status" id="seller-decision-status" aria-live="polite">尚未调用模型。模型失败或证据不足时保持 2 CCD，且不会开放链上开始按钮。</div>
             </div>
@@ -118,7 +113,7 @@
               </section>
               <section class="round-progress" id="round-progress" aria-labelledby="round-progress-title">
                 <div class="round-progress-heading">
-                  <span id="round-progress-title">本轮链上进度</span>
+                  <span id="round-progress-title">当前清算进度</span>
                   <strong id="round-progress-status">等待实例</strong>
                 </div>
                 <ol>
@@ -159,7 +154,7 @@
               <div class="action-row" id="buyer-reveal-shell" aria-label="买家揭示报价">
                 <button class="button button-secondary" id="reveal-bid-button" type="button" disabled>揭示我的报价</button>
               </div>
-              <div class="action-row" id="finalize-shell" aria-label="结算本轮">
+              <div class="action-row" id="finalize-shell" aria-label="结算当前清算窗口">
                 <button class="button button-primary" id="finalize-chain-button" type="button" disabled>按固定规则结算</button>
               </div>
               <p class="todo">模块引用在 Testnet 全局复用：重启本地服务后可直接创建新的 0 CCD 容量窗口，无须重复部署相同 Wasm。页面仅在链上阶段与当前交易账户匹配时开放动作。买家报价盐和卖家底价盐只保存在当前浏览器；丢失后可能无法揭示。</p>
@@ -169,7 +164,7 @@
           <article class="panel evidence-panel">
             <div class="panel-kicker"><span>04</span> 结算与公开证据</div>
             <div class="panel-title-row">
-              <div><h3>链上结算可独立核验</h3><p>每笔已记录的 Testnet 交易均可在 CCDExplorer 打开。演示以“规格摘要一致、结算完成、赢家地址匹配”为止，不提供链下 API 交付。</p></div>
+              <div><h3>链上结算可独立核验</h3><p>每笔已记录的 Testnet 交易均可在 CCDExplorer 打开。当前交付以“规格摘要一致、结算完成、赢家地址匹配”为止，不提供链下 API 交付。</p></div>
               <span class="badge badge-neutral" id="evidence-badge">等待链上核验</span>
             </div>
             <div class="evidence-summary" id="evidence-summary">正在读取仓库中的 Testnet 证据…</div>
@@ -181,7 +176,7 @@
               <div class="testnet-status" id="winner-verification-status">结算后可进行只读核验。</div>
             </section>
             <section class="settlement-breakdown" id="settlement-breakdown" hidden aria-live="polite">
-              <h4>本轮结算核对</h4>
+              <h4>当前结算核对</h4>
               <dl id="settlement-breakdown-list"></dl>
             </section>
             <p class="todo">公开构建只读取脱敏证据快照；不会要求钱包连接，也不会伪装成本地动态交付服务。</p>

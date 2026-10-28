@@ -101,7 +101,6 @@ const elements = {
   winnerVerification: byId('winner-verification'),
   verifyWinnerButton: byId('verify-winner-button'),
   winnerVerificationStatus: byId('winner-verification-status'),
-  runtimeBanner: byId('runtime-banner'),
   runtimeModeBadge: byId('runtime-mode-badge'),
 }
 
@@ -422,7 +421,7 @@ elements.cancelRoundButton.addEventListener('click', () => {
 
 elements.backupReserveButton.addEventListener('click', () => {
   try {
-    if (!testnet.startPlan) throw new ConcordiumClientError('ROUND_PLAN_UNAVAILABLE', '请先开始本轮，才能下载底价揭示备份。')
+    if (!testnet.startPlan) throw new ConcordiumClientError('ROUND_PLAN_UNAVAILABLE', '请先发布当前容量窗口，才能下载底价揭示备份。')
     downloadReserveRevealBackup(testnet.startPlan)
     setTestnetStatus('底价揭示备份已下载；请妥善保存且不要公开盐值。下载不会发送链上交易。', 'success')
   } catch (error) {
@@ -547,7 +546,7 @@ function renderWinnerVerification() {
     elements.winnerVerificationStatus.dataset.tone = 'neutral'
   } else if (!testnet.winnerVerification) {
     elements.winnerVerificationStatus.textContent = phase === 'NoSale'
-      ? '本轮未成交；可核验不会存在赢家。'
+      ? '当前容量窗口未成交；可核验不会存在赢家。'
       : '此操作只读 Testnet，不发起钱包签名或 API 调用。'
     elements.winnerVerificationStatus.dataset.tone = 'neutral'
   }
@@ -762,7 +761,7 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
       : finalizeOpen
       ? '揭示期已结束，等待任意账户触发固定规则结算。'
       : terminal
-      ? '本轮已经结束；查看你的链上结果和退款记录。'
+      ? '当前容量窗口已经结束；查看你的链上结果和退款记录。'
       : '你的隐藏报价承诺已记录。请妥善保留当前浏览器中的揭示凭证，并等待揭示期。'
   } else if (finalizeOpen) {
     elements.roleGuidance.textContent = '揭示期已结束。任何已连接账户都可以触发一次固定规则结算。'
@@ -798,7 +797,7 @@ function restoreContextEvidence(status) {
     ? '链上结算'
     : phase === 'Cancelled'
     ? '取消并退款'
-    : '本轮链上状态确认'
+    : '当前容量窗口链上状态确认'
   trackVerifiedTransaction(label, {
     hash: status.round.hash,
     explorerUrl: status.round.explorerUrl,
@@ -879,7 +878,7 @@ function formatInitializedStatus(initialization, view) {
 function formatRoundStatus(round, view) {
   const phase = Object.keys(view.state.phase ?? {}).join('') || JSON.stringify(view.state.phase)
   return [
-    `容量窗口第 ${round.roundId} 轮已最终确认：链上阶段 ${phase}。`,
+    `当前清算窗口已最终确认：链上阶段 ${phase}。`,
     `合约余额：${view.contractBalance} CCD；承诺截止：${formatDate(round.commitEnd)}`,
     `统一揭示截止：${formatDate(round.revealEnd)}`,
     round.explorerUrl,
@@ -1274,10 +1273,6 @@ function renderRuntimeMode() {
   document.body.dataset.runtimeMode = runtime.mode
   elements.runtimeModeBadge.textContent = local ? 'Local live mode' : 'Public evidence mode'
   elements.runtimeModeBadge.className = `badge ${local ? 'badge-warning' : 'badge-success'}`
-  elements.runtimeBanner.textContent = local
-    ? '本地完整模式：可调用 DeepSeek、连接 Concordium Wallet，并向 Testnet 发送经用户确认的交易。'
-    : '公开只读模式：无需钱包即可查看真实 Testnet 与模型评测证据；动态操作仅在本地完整模式开放。'
-  elements.runtimeBanner.dataset.tone = local ? 'live' : 'readonly'
 }
 
 function formatDate(value) {

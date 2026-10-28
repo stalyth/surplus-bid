@@ -3,8 +3,8 @@
   "serviceName": "Priority AI Analysis",
   "capacityUnits": 1,
   "delivery": {
-    "mode": "This demo ends after on-chain settlement and winner-address verification."
+    "mode": "链上结算完成后核验赢家地址"
   },
-  "scope": "A short-lived priority execution capacity window for this demo.",
-  "limitations": "Demo only. No production AI model, SLA, or service-quality guarantee is represented."
+  "scope": "短时间窗口内的优先 AI 分析执行容量。",
+  "limitations": "当前交付包含链上结算与赢家地址核验；不包含 API 调用或生产服务质量保证。"
 }

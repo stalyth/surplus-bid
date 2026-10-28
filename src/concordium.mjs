@@ -225,7 +225,7 @@ export async function prepareStartRound(connection, initialization, {
   if (account !== initialization.sender) {
     throw new ConcordiumClientError(
       'WRONG_SELLER_ACCOUNT',
-      `实例 <${initialization.address.index},${initialization.address.subindex}> 的初始化签名账户是 ${shortAccountAddress(initialization.sender)}；请在钱包切换到该账户后再开始本轮。`,
+      `实例 <${initialization.address.index},${initialization.address.subindex}> 的初始化签名账户是 ${shortAccountAddress(initialization.sender)}；请在钱包切换到该账户后再发布当前容量窗口。`,
     )
   }
   if (!Number.isSafeInteger(now) || now <= 0) {
@@ -266,7 +266,7 @@ export async function prepareStartRound(connection, initialization, {
 export async function submitStartRound(connection, initialization, plan, { timeoutMs = 120_000 } = {}) {
   const sdk = requireTransactionSdk()
   if (!plan?.parameters || !initialization?.address) {
-    throw new ConcordiumClientError('ROUND_PLAN_UNAVAILABLE', '本轮承诺参数缺失，未发送交易。')
+    throw new ConcordiumClientError('ROUND_PLAN_UNAVAILABLE', '当前容量窗口的承诺参数缺失，未发送交易。')
   }
   await verifyWalletAuthorization(connection, timeoutMs)
   if (connection.accounts[0] !== initialization.sender || connection.accounts[0] !== plan.seller) {
@@ -287,7 +287,7 @@ export async function submitStartRound(connection, initialization, plan, { timeo
       await getSchemaBase64(),
     ),
     timeoutMs,
-    '等待钱包确认开始本轮超时。请在钱包活动中检查原请求，勿重复发送。',
+    '等待钱包确认发布当前容量窗口超时。请在钱包活动中检查原请求，勿重复发送。',
   )
   return assertTransactionHash(hash)
 }
