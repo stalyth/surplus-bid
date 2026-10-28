@@ -157,41 +157,72 @@
               <div class="action-row" id="finalize-shell" aria-label="结算当前清算窗口">
                 <button class="button button-primary" id="finalize-chain-button" type="button" disabled>按固定规则结算</button>
               </div>
-              <p class="todo">模块引用在 Testnet 全局复用：重启本地服务后可直接创建新的 0 CCD 容量窗口，无须重复部署相同 Wasm。页面仅在链上阶段与当前交易账户匹配时开放动作。买家报价盐和卖家底价盐只保存在当前浏览器；丢失后可能无法揭示。</p>
+              <section class="winner-verification" id="winner-verification" hidden aria-live="polite">
+                <h4>链上赢家核验</h4>
+                <p>读取已结算实例的 <code>view</code>，核对当前账户是否等于链上赢家，同时核对容量规格摘要。此步骤不签名、不发 Token，也不代表 API 已交付。</p>
+                <button class="button button-secondary" id="verify-winner-button" type="button" disabled>核验当前账户</button>
+                <div class="testnet-status" id="winner-verification-status">结算后可进行只读核验。</div>
+              </section>
             </div>
           </article>
 
-          <article class="panel evidence-panel">
-            <div class="panel-kicker"><span>04</span> 结算与公开证据</div>
-            <div class="panel-title-row">
-              <div><h3>链上结算可独立核验</h3><p>每笔已记录的 Testnet 交易均可在 CCDExplorer 打开。当前交付以“规格摘要一致、结算完成、赢家地址匹配”为止，不提供链下 API 交付。</p></div>
-              <span class="badge badge-neutral" id="evidence-badge">等待链上核验</span>
-            </div>
-            <div class="evidence-summary" id="evidence-summary">正在读取仓库中的 Testnet 证据…</div>
-            <div class="evidence-list" id="evidence-list"></div>
-            <section class="winner-verification" id="winner-verification" hidden aria-live="polite">
-              <h4>链上赢家核验</h4>
-              <p>读取已结算实例的 <code>view</code>，核对当前账户是否等于链上赢家，同时核对容量规格摘要。此步骤不签名、不发 Token，也不代表 API 已交付。</p>
-              <button class="button button-secondary" id="verify-winner-button" type="button" disabled>核验当前账户</button>
-              <div class="testnet-status" id="winner-verification-status">结算后可进行只读核验。</div>
-            </section>
-            <section class="settlement-breakdown" id="settlement-breakdown" hidden aria-live="polite">
-              <h4>当前结算核对</h4>
-              <dl id="settlement-breakdown-list"></dl>
-            </section>
-            <p class="todo">公开构建只读取脱敏证据快照；不会要求钱包连接，也不会伪装成本地动态交付服务。</p>
-          </article>
         </div>
       </section>
 
-      <section class="activity" aria-labelledby="activity-title">
+      <section class="evidence-section" aria-labelledby="evidence-title">
+        <article class="panel evidence-panel">
+          <div class="panel-kicker"><span>04</span> 结算与公开证据</div>
+          <div class="panel-title-row">
+            <div><h3 id="evidence-title">链上结算可独立核验</h3><p>每笔已记录的 Testnet 交易均可在 CCDExplorer 打开。当前交付以“规格摘要一致、结算完成、赢家地址匹配”为止，不提供链下 API 交付。</p></div>
+            <span class="badge badge-neutral" id="evidence-badge">等待链上核验</span>
+          </div>
+          <div class="evidence-summary" id="evidence-summary">正在读取仓库中的 Testnet 证据…</div>
+          <div class="evidence-list" id="evidence-list"></div>
+          <section class="settlement-breakdown" id="settlement-breakdown" hidden aria-live="polite">
+            <h4>当前结算核对</h4>
+            <dl id="settlement-breakdown-list"></dl>
+          </section>
+          <p class="todo">公开构建只读取脱敏证据快照；不会要求钱包连接，也不会伪装成本地动态交付服务。</p>
+        </article>
+      </section>
+
+      <section class="market-signal" aria-labelledby="market-signal-title">
         <div class="section-heading compact">
-          <div><p class="eyebrow">Session activity</p><h2 id="activity-title">本次交易操作记录</h2></div>
-          <span class="badge badge-neutral">本地保留最近 10 条</span>
+          <div>
+            <p class="eyebrow">Price discovery</p>
+            <h2 id="market-signal-title">市场价格信号</h2>
+          </div>
+          <span class="badge badge-neutral" id="market-signal-badge">等待已确认样本</span>
         </div>
-        <ol id="activity-log" class="activity-log">
-          <li><time>等待</time><span>钱包和链上操作会在这里按时间记录。</span><em>placeholder</em></li>
-        </ol>
+        <p class="market-signal-intro">只统计与当前容量规格指纹一致、已最终确认且资金核对通过的成交。该面板提供早期观察，不把样本统计称为公允价格。</p>
+        <div class="market-signal-layout">
+          <section class="market-signal-summary" aria-label="价格信号摘要">
+            <div class="signal-metrics" id="market-signal-metrics"></div>
+            <p class="signal-reading" id="market-signal-reading">正在读取已确认成交…</p>
+          </section>
+          <figure class="signal-chart" aria-labelledby="signal-chart-title">
+            <figcaption id="signal-chart-title">已确认成交的价格构成</figcaption>
+            <div class="signal-legend" aria-label="图例">
+              <span><i class="signal-dot reserve"></i>卖家底价</span>
+              <span><i class="signal-dot price"></i>成交价</span>
+              <span><i class="signal-dot bid"></i>赢家报价</span>
+            </div>
+            <div class="signal-chart-canvas" id="market-signal-chart" role="img" aria-label="已确认成交的底价、成交价与赢家报价图"></div>
+          </figure>
+        </div>
+      </section>
+
+      <section class="market-history" aria-labelledby="market-history-title">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">Confirmed market history</p>
+            <h2 id="market-history-title">已确认成交记录</h2>
+          </div>
+          <span class="badge badge-neutral" id="market-history-badge">只读链上结算</span>
+        </div>
+        <p class="market-history-intro">仅收录已经在 Concordium Testnet 最终确认、且资金分配可核对的容量成交。不同规格指纹或历史协议不会被混入当前规格的价格信号。</p>
+        <div class="market-history-summary" id="market-history-summary">正在读取已确认成交记录…</div>
+        <div class="market-history-list" id="market-history-list"></div>
       </section>
 
     </main>

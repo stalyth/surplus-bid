@@ -1,0 +1,70 @@
+{
+  "network": "Concordium Testnet",
+  "recordedAt": "2026-10-28",
+  "dataKind": "Three confirmed surplus_bid settlements for the same service specification digest. Network fees are excluded from contract settlement accounting.",
+  "settlements": [
+    {
+      "version": 1,
+      "settledAt": "2026-10-28T07:07:57.603Z",
+      "instance": { "index": "13024", "subindex": "0" },
+      "contractUrl": "https://ccdexplorer.io/testnet/contract/13024/0",
+      "transaction": {
+        "hash": "e547c26c8ddbc23e5aa1609450a9ff39659f2e76641bd08c47011b93444c5252",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/e547c26c8ddbc23e5aa1609450a9ff39659f2e76641bd08c47011b93444c5252"
+      },
+      "service": { "id": "2ae5fd44b1af35dabfd2e1a41f7c12ca10d5df44a6cc23429e634ae8ee7cbc0a", "name": "Priority AI Analysis", "capacityUnits": 1 },
+      "reserveMicroCcd": "2200000",
+      "winningBidMicroCcd": "3000000",
+      "clearingPriceMicroCcd": "2600000",
+      "surplusMicroCcd": "800000",
+      "platformFeeMicroCcd": "80000",
+      "buyerRefundMicroCcd": "360000",
+      "totalRefundMicroCcd": "2860000",
+      "sellerReceivesMicroCcd": "4560000",
+      "totalDepositedMicroCcd": "7500000",
+      "reconciled": true
+    },
+    {
+      "version": 1,
+      "settledAt": "2026-10-28T08:03:31.160Z",
+      "instance": { "index": "13025", "subindex": "0" },
+      "contractUrl": "https://ccdexplorer.io/testnet/contract/13025/0",
+      "transaction": {
+        "hash": "2005d407b81294b37383e989161d2c8fad58a038d2b578ef9b4ce1215f0875a6",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/2005d407b81294b37383e989161d2c8fad58a038d2b578ef9b4ce1215f0875a6"
+      },
+      "service": { "id": "2ae5fd44b1af35dabfd2e1a41f7c12ca10d5df44a6cc23429e634ae8ee7cbc0a", "name": "Priority AI Analysis", "capacityUnits": 1 },
+      "reserveMicroCcd": "2200000",
+      "winningBidMicroCcd": "2900000",
+      "clearingPriceMicroCcd": "2550000",
+      "surplusMicroCcd": "700000",
+      "platformFeeMicroCcd": "70000",
+      "buyerRefundMicroCcd": "315000",
+      "totalRefundMicroCcd": "2915000",
+      "sellerReceivesMicroCcd": "4515000",
+      "totalDepositedMicroCcd": "7500000",
+      "reconciled": true
+    },
+    {
+      "version": 1,
+      "settledAt": "2026-10-28T08:19:24.707Z",
+      "instance": { "index": "13026", "subindex": "0" },
+      "contractUrl": "https://ccdexplorer.io/testnet/contract/13026/0",
+      "transaction": {
+        "hash": "617df0481d8023575ef364108081f041ad14243a449308d27bdd630b14efc32b",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/617df0481d8023575ef364108081f041ad14243a449308d27bdd630b14efc32b"
+      },
+      "service": { "id": "2ae5fd44b1af35dabfd2e1a41f7c12ca10d5df44a6cc23429e634ae8ee7cbc0a", "name": "Priority AI Analysis", "capacityUnits": 1 },
+      "reserveMicroCcd": "2200000",
+      "winningBidMicroCcd": "4000000",
+      "clearingPriceMicroCcd": "3100000",
+      "surplusMicroCcd": "1800000",
+      "platformFeeMicroCcd": "180000",
+      "buyerRefundMicroCcd": "810000",
+      "totalRefundMicroCcd": "3810000",
+      "sellerReceivesMicroCcd": "5010000",
+      "totalDepositedMicroCcd": "9000000",
+      "reconciled": true
+    }
+  ]
+}

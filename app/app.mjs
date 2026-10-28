@@ -1,4 +1,5 @@
 import { formatCcd } from '/src/rules.mjs'
+import { createConfirmedSettlement } from '/src/market-history.mjs'
 import {
   ConcordiumClientError,
   connectConcordiumWallet,
@@ -31,6 +32,8 @@ let activity = []
 let walletConnection = null
 let observedWalletProvider = null
 let historicalEvidence = null
+let confirmedSettlements = []
+let publishedSettlements = []
 let serviceSpec = null
 let serviceSpecError = null
 let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, transactions: [], pending: null, busy: false, agentBusy: false, winnerVerification: null }
@@ -92,7 +95,13 @@ const elements = {
   buyerRevealShell: byId('buyer-reveal-shell'),
   finalizeShell: byId('finalize-shell'),
   testnetStatus: byId('testnet-status'),
-  activityLog: byId('activity-log'),
+  marketHistoryBadge: byId('market-history-badge'),
+  marketHistorySummary: byId('market-history-summary'),
+  marketHistoryList: byId('market-history-list'),
+  marketSignalBadge: byId('market-signal-badge'),
+  marketSignalMetrics: byId('market-signal-metrics'),
+  marketSignalReading: byId('market-signal-reading'),
+  marketSignalChart: byId('market-signal-chart'),
   evidenceSummary: byId('evidence-summary'),
   evidenceList: byId('evidence-list'),
   evidenceBadge: byId('evidence-badge'),
@@ -360,6 +369,7 @@ elements.finalizeChainButton.addEventListener('click', () => {
     testnet.view = verified.view; testnet.round = verified.round; testnet.pending = null
     trackVerifiedTransaction('链上结算', verified)
     record(`链上结算已最终确认：${shortHash(hash)}。`, 'chain')
+    await loadLocalSessionHistory()
     setTestnetStatus(formatLiveState(verified.view, verified.explorerUrl), 'success')
   })
 })
@@ -488,7 +498,8 @@ function render() {
     elements.walletAccountNotice.hidden = true
   }
   renderTestnet()
-  renderActivity()
+  renderMarketHistory()
+  renderMarketSignal()
   renderEvidencePanel()
   renderWinnerVerification()
 }
@@ -787,6 +798,7 @@ async function refreshTestnetStatus() {
     formatStatusSummary(status),
     'success',
   )
+  void loadLocalSessionHistory()
 }
 
 function restoreContextEvidence(status) {
@@ -1019,28 +1031,10 @@ async function loadLocalSessionHistory() {
       confirmedAt: entry.at,
       instance: entry.instance,
     }))
+    confirmedSettlements = Array.isArray(history.settlements) ? history.settlements : []
     render()
   } catch (error) {
     console.error('Could not restore local session history:', error)
-  }
-}
-
-function renderActivity() {
-  elements.activityLog.replaceChildren()
-  const entries = activity.length
-    ? activity
-    : [{ time: '等待', message: '连接钱包后，链上操作会在这里按时间记录。', status: 'placeholder' }]
-
-  for (const entry of entries) {
-    const item = document.createElement('li')
-    const time = document.createElement('time')
-    const message = document.createElement('span')
-    const status = document.createElement('em')
-    time.textContent = entry.time
-    message.textContent = entry.message
-    status.textContent = entry.status
-    item.append(time, message, status)
-    elements.activityLog.append(item)
   }
 }
 
@@ -1059,12 +1053,25 @@ async function loadEvidence() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     historicalEvidence = await response.json()
     renderEvidencePanel()
+    renderMarketHistory()
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     elements.evidenceSummary.textContent = `证据读取失败：${detail}`
     elements.evidenceSummary.dataset.tone = 'error'
   } finally {
     clearTimeout(timeout)
+  }
+}
+
+async function loadPublishedMarketSettlements() {
+  try {
+    const response = await fetch('/evidence/confirmed-market-settlements.json', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const payload = await response.json()
+    publishedSettlements = Array.isArray(payload.settlements) ? payload.settlements : []
+    render()
+  } catch (error) {
+    console.error(`Could not load published market settlements: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -1095,6 +1102,332 @@ function renderEvidencePanel() {
     return
   }
   if (historicalEvidence) renderHistoricalEvidence(historicalEvidence)
+}
+
+function renderMarketHistory() {
+  const records = marketHistoryRecords()
+  const currentSpecRecords = currentSpecSettlementRecords(records)
+  elements.marketHistoryList.replaceChildren()
+  elements.marketHistoryBadge.textContent = records.length > 0 ? `已确认 ${records.length} 笔` : '暂无已确认成交'
+  elements.marketHistoryBadge.className = `badge ${records.length > 0 ? 'badge-success' : 'badge-warning'}`
+
+  if (records.length === 0) {
+    elements.marketHistorySummary.textContent = '当前尚无已最终确认的容量成交。结算完成且资金核对通过后，才会写入此处；不会以 Seller Agent 的演练输入或未确认交易补充记录。'
+    const empty = document.createElement('p')
+    empty.className = 'market-history-empty'
+    empty.textContent = '暂无可用于价格发现的已确认成交记录。'
+    elements.marketHistoryList.append(empty)
+    return
+  }
+
+  elements.marketHistorySummary.textContent = `已确认 ${records.length} 笔成交；其中 ${currentSpecRecords.length} 笔与当前容量规格指纹一致，可作为该规格的价格信号。其余记录保留为独立历史证据，不混入当前规格。`
+  for (const record of records) elements.marketHistoryList.append(renderMarketHistoryEntry(record))
+}
+
+function marketHistoryRecords() {
+  const records = []
+  const liveRecord = currentSettlementRecord()
+  if (liveRecord) records.push(liveRecord)
+  for (const record of confirmedSettlements) {
+    if (!records.some((entry) => sameInstance(entry.instance, record.instance))) records.push(record)
+  }
+  for (const record of publishedSettlements) {
+    if (!records.some((entry) => sameInstance(entry.instance, record.instance))) records.push(record)
+  }
+  const legacy = legacySettlementRecord(historicalEvidence)
+  if (legacy && !records.some((record) => sameInstance(record.instance, legacy.instance))) records.push(legacy)
+  return records
+    .map((record) => ({
+      ...record,
+      service: {
+        ...record.service,
+        matchesCurrentSpec: Boolean(serviceSpec?.hash && record.service?.id === serviceSpec.hash),
+      },
+    }))
+    .sort((left, right) => String(right.settledAt).localeCompare(String(left.settledAt)))
+}
+
+function currentSpecSettlementRecords(records = marketHistoryRecords()) {
+  return records.filter((record) => record.reconciled === true && record.service?.matchesCurrentSpec === true)
+}
+
+function renderMarketSignal() {
+  const records = currentSpecSettlementRecords().sort((left, right) => String(left.settledAt).localeCompare(String(right.settledAt)))
+  const sampleCount = records.length
+  elements.marketSignalMetrics.replaceChildren()
+  elements.marketSignalBadge.textContent = sampleCount >= 3 ? `已确认样本 n = ${sampleCount}` : `样本 n = ${sampleCount}`
+  elements.marketSignalBadge.className = `badge ${sampleCount >= 3 ? 'badge-success' : 'badge-warning'}`
+
+  if (sampleCount === 0) {
+    elements.marketSignalReading.textContent = '当前规格尚无已确认且资金核对通过的成交，暂不形成价格信号。'
+    renderMarketSignalEmpty('等待同规格的已确认成交。')
+    return
+  }
+
+  const prices = records.map((record) => BigInt(record.clearingPriceMicroCcd)).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
+  const middle = Math.floor(prices.length / 2)
+  const median = prices.length % 2 === 1 ? prices[middle] : (prices[middle - 1] + prices[middle]) / 2n
+  const latest = records.at(-1)
+  const lowest = prices[0]
+  const highest = prices.at(-1)
+  const averageSurplus = records.reduce((total, record) => total + BigInt(record.surplusMicroCcd), 0n) / BigInt(sampleCount)
+  const metrics = [
+    ['已确认样本', `n = ${sampleCount}`],
+    ['最新成交价', `${formatMicroCcd(latest.clearingPriceMicroCcd)} CCD`],
+    ['中位成交价', `${formatMicroCcd(median)} CCD`],
+    ['成交价区间', `${formatMicroCcd(lowest)}–${formatMicroCcd(highest)} CCD`],
+    ['平均交易剩余', `${formatMicroCcd(averageSurplus)} CCD`],
+    ['最新 / 中位数', relativeToMedian(latest.clearingPriceMicroCcd, median)],
+  ]
+  for (const [label, value] of metrics) {
+    const metric = document.createElement('div')
+    const metricLabel = document.createElement('span')
+    const metricValue = document.createElement('strong')
+    metricLabel.textContent = label
+    metricValue.textContent = value
+    metric.append(metricLabel, metricValue)
+    elements.marketSignalMetrics.append(metric)
+  }
+  elements.marketSignalReading.textContent = sampleCount < 3
+    ? `仅有 ${sampleCount} 笔样本，暂不形成稳定判断；以下图表只展示已确认事实。`
+    : `早期观察：最新成交价为 ${formatMicroCcd(latest.clearingPriceMicroCcd)} CCD，${relativeToMedian(latest.clearingPriceMicroCcd, median, 'text')}；样本仅 ${sampleCount} 笔，继续观察，不代表稳定趋势或公允价格。`
+  renderMarketSignalChart(records)
+}
+
+function relativeToMedian(value, median, format = 'short') {
+  const amount = BigInt(value)
+  if (median === 0n) return format === 'text' ? '中位成交价为 0，无法比较' : '—'
+  const difference = amount - median
+  const basisPoints = (difference * 10_000n) / median
+  const percent = `${basisPoints < 0n ? '-' : '+'}${formatMicroPercent(basisPoints < 0n ? -basisPoints : basisPoints)}%`
+  return format === 'text' ? `较中位成交价 ${percent}` : percent
+}
+
+function formatMicroPercent(basisPoints) {
+  const whole = basisPoints / 100n
+  const fraction = (basisPoints % 100n).toString().padStart(2, '0')
+  return `${whole}.${fraction}`
+}
+
+function renderMarketSignalEmpty(message) {
+  elements.marketSignalChart.replaceChildren()
+  const empty = document.createElement('p')
+  empty.className = 'signal-chart-empty'
+  empty.textContent = message
+  elements.marketSignalChart.append(empty)
+}
+
+function renderMarketSignalChart(records) {
+  if (records.length === 0) {
+    renderMarketSignalEmpty('等待同规格的已确认成交。')
+    return
+  }
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(ns, 'svg')
+  svg.setAttribute('viewBox', '0 0 760 218')
+  svg.setAttribute('preserveAspectRatio', 'none')
+  const values = records.flatMap((record) => [
+    Number(BigInt(record.reserveMicroCcd)),
+    Number(BigInt(record.clearingPriceMicroCcd)),
+    Number(BigInt(record.winningBidMicroCcd)),
+  ])
+  const lower = Math.min(...values)
+  const upper = Math.max(...values)
+  const padding = Math.max(Math.round((upper - lower) * 0.16), 100_000)
+  const min = Math.max(0, lower - padding)
+  const max = upper + padding
+  const left = 62
+  const right = 18
+  const top = 16
+  const bottom = 38
+  const width = 760 - left - right
+  const height = 218 - top - bottom
+  const y = (value) => top + ((max - value) / (max - min || 1)) * height
+  const x = (index) => left + (records.length === 1 ? width / 2 : (index / (records.length - 1)) * width)
+  for (let line = 0; line < 4; line += 1) {
+    const value = min + ((max - min) * line) / 3
+    const lineY = y(value)
+    const grid = document.createElementNS(ns, 'line')
+    grid.setAttribute('x1', String(left))
+    grid.setAttribute('x2', String(left + width))
+    grid.setAttribute('y1', String(lineY))
+    grid.setAttribute('y2', String(lineY))
+    grid.setAttribute('stroke', '#2d4f3b')
+    grid.setAttribute('stroke-width', '1')
+    svg.append(grid)
+    const label = document.createElementNS(ns, 'text')
+    label.setAttribute('x', '0')
+    label.setAttribute('y', String(lineY + 4))
+    label.setAttribute('fill', '#89958e')
+    label.setAttribute('font-size', '10')
+    label.textContent = `${formatMicroCcd(BigInt(Math.round(value)))} CCD`
+    svg.append(label)
+  }
+  const series = [
+    ['reserveMicroCcd', '#ffd37a'],
+    ['clearingPriceMicroCcd', '#86f7b8'],
+    ['winningBidMicroCcd', '#98c7ff'],
+  ]
+  for (const [key, color] of series) {
+    const points = records.map((record, index) => `${x(index)},${y(Number(BigInt(record[key])))}`).join(' ')
+    const path = document.createElementNS(ns, 'polyline')
+    path.setAttribute('points', points)
+    path.setAttribute('fill', 'none')
+    path.setAttribute('stroke', color)
+    path.setAttribute('stroke-width', '2')
+    path.setAttribute('stroke-linejoin', 'round')
+    svg.append(path)
+    records.forEach((record, index) => {
+      const point = document.createElementNS(ns, 'circle')
+      point.setAttribute('cx', String(x(index)))
+      point.setAttribute('cy', String(y(Number(BigInt(record[key])))))
+      point.setAttribute('r', '4')
+      point.setAttribute('fill', color)
+      const title = document.createElementNS(ns, 'title')
+      title.textContent = `<${record.instance.index},${record.instance.subindex}> · ${formatMicroCcd(record[key])} CCD`
+      point.append(title)
+      svg.append(point)
+    })
+  }
+  records.forEach((record, index) => {
+    const label = document.createElementNS(ns, 'text')
+    label.setAttribute('x', String(x(index)))
+    label.setAttribute('y', '207')
+    label.setAttribute('text-anchor', 'middle')
+    label.setAttribute('fill', '#89958e')
+    label.setAttribute('font-size', '10')
+    label.textContent = `<${record.instance.index},${record.instance.subindex}>`
+    svg.append(label)
+  })
+  elements.marketSignalChart.replaceChildren(svg)
+}
+
+function currentSettlementRecord() {
+  if (!testnet.initialization || phaseName(testnet.view?.state?.phase) !== 'Settled') return null
+  const transaction = testnet.transactions.find((entry) => (
+    entry.label === '链上结算' && sameInstance(entry.instance, testnet.initialization.address)
+  ))
+  if (!transaction) return null
+  try {
+    return createConfirmedSettlement({
+      initialization: testnet.initialization,
+      view: testnet.view,
+      transaction: {
+        hash: transaction.hash,
+        explorerUrl: transaction.explorerUrl,
+        confirmedAt: transaction.confirmedAt,
+      },
+      serviceSpec,
+    })
+  } catch (error) {
+    console.error('Could not create current settlement record:', error)
+    return null
+  }
+}
+
+function legacySettlementRecord(evidence) {
+  const round = evidence?.currentCoreRound
+  const allocation = round?.finalView?.allocation
+  const transaction = round?.transactions?.finalize
+  if (round?.finalView?.phase !== 'Settled' || !allocation || !transaction?.hash || !round.instance?.address) return null
+  const totalDeposited = BigInt(round.finalView.totalDepositedMicroCcd)
+  const buyerRefund = BigInt(allocation.buyerRefundMicroCcd)
+  const platformFee = BigInt(allocation.platformFeeMicroCcd)
+  const sellerReceives = BigInt(round.finalView.sellerTotalMicroCcd)
+  return {
+    version: 1,
+    settledAt: evidence.recordedAt ? `${evidence.recordedAt}T00:00:00.000Z` : null,
+    instance: { index: String(round.instance.address.index), subindex: String(round.instance.address.subindex) },
+    contractUrl: round.instance.contractUrl,
+    transaction: { hash: transaction.hash, explorerUrl: transaction.explorerUrl },
+    service: { id: null, name: '历史容量规格（旧协议）', capacityUnits: null, matchesCurrentSpec: false },
+    seller: round.instance.seller,
+    winner: allocation.winner,
+    reserveMicroCcd: allocation.priceMicroCcd ? (BigInt(allocation.priceMicroCcd) * 2n - BigInt(allocation.winningBidMicroCcd)).toString() : '0',
+    winningBidMicroCcd: allocation.winningBidMicroCcd,
+    clearingPriceMicroCcd: allocation.priceMicroCcd,
+    surplusMicroCcd: (BigInt(allocation.winningBidMicroCcd) - (BigInt(allocation.priceMicroCcd) * 2n - BigInt(allocation.winningBidMicroCcd))).toString(),
+    platformFeeMicroCcd: allocation.platformFeeMicroCcd,
+    buyerRefundMicroCcd: allocation.buyerRefundMicroCcd,
+    totalRefundMicroCcd: allocation.buyerRefundMicroCcd,
+    sellerReceivesMicroCcd: round.finalView.sellerTotalMicroCcd,
+    totalDepositedMicroCcd: round.finalView.totalDepositedMicroCcd,
+    reconciled: totalDeposited === buyerRefund + platformFee + sellerReceives,
+    protocol: '历史顺序揭示协议；不计入当前规格的价格信号。',
+  }
+}
+
+function renderMarketHistoryEntry(record) {
+  const entry = document.createElement('details')
+  entry.className = 'market-history-entry'
+  const summary = document.createElement('summary')
+  const capacity = document.createElement('span')
+  const capacityName = record.service?.capacityUnits === null
+    ? record.service?.name ?? '已绑定的容量规格'
+    : `${record.service?.name ?? '已绑定的容量规格'} · ${record.service.capacityUnits} 单位`
+  const capacityLabel = document.createElement('small')
+  capacityLabel.textContent = '容量规格'
+  const capacityValue = document.createElement('strong')
+  capacityValue.textContent = capacityName
+  capacity.append(capacityLabel, capacityValue)
+  summary.append(capacity)
+  for (const [label, value] of [
+    ['结算时间', record.settledAt ? formatDate(record.settledAt) : '已确认'],
+    ['成交价', `${formatMicroCcd(record.clearingPriceMicroCcd)} CCD`],
+    ['交易剩余', `${formatMicroCcd(record.surplusMicroCcd)} CCD`],
+    ['平台费', `${formatMicroCcd(record.platformFeeMicroCcd)} CCD`],
+  ]) {
+    const item = document.createElement('span')
+    const itemLabel = document.createElement('small')
+    const itemValue = document.createElement('strong')
+    itemLabel.textContent = label
+    itemValue.textContent = value
+    item.append(itemLabel, itemValue)
+    summary.append(item)
+  }
+  const result = document.createElement('strong')
+  result.className = 'history-result'
+  result.textContent = record.reconciled ? '资金核对通过' : '资金核对失败'
+  summary.append(result)
+
+  const detail = document.createElement('div')
+  detail.className = 'history-detail'
+  const fields = document.createElement('dl')
+  for (const [label, value] of [
+    ['容量窗口', `<${record.instance.index},${record.instance.subindex}>`],
+    ['卖家底价', `${formatMicroCcd(record.reserveMicroCcd)} CCD`],
+    ['中标报价', `${formatMicroCcd(record.winningBidMicroCcd)} CCD`],
+    ['赢家', record.winner ? shortAccountAddress(record.winner) : '已脱敏'],
+    ['赢家退款', `${formatMicroCcd(record.buyerRefundMicroCcd)} CCD`],
+    ['买家退款合计', `${formatMicroCcd(record.totalRefundMicroCcd)} CCD`],
+    ['卖家所得', `${formatMicroCcd(record.sellerReceivesMicroCcd)} CCD`],
+    ['链上总托管', `${formatMicroCcd(record.totalDepositedMicroCcd)} CCD`],
+  ]) {
+    const row = document.createElement('div')
+    const term = document.createElement('dt')
+    const description = document.createElement('dd')
+    term.textContent = label
+    description.textContent = value
+    row.append(term, description)
+    fields.append(row)
+  }
+  const links = document.createElement('div')
+  links.className = 'history-links'
+  const qualification = document.createElement('p')
+  qualification.textContent = record.service?.matchesCurrentSpec
+    ? '规格指纹与当前 service-spec.json 一致：该记录可用于当前容量规格的价格信号。'
+    : record.protocol ?? '规格指纹与当前 service-spec.json 不一致：保留为独立历史证据，不混入当前价格信号。'
+  const fingerprint = document.createElement('code')
+  fingerprint.textContent = record.service?.id ? `规格指纹：${record.service.id}` : '规格指纹：历史快照未保存'
+  const transaction = document.createElement('a')
+  transaction.href = record.transaction.explorerUrl
+  transaction.target = '_blank'
+  transaction.rel = 'noreferrer'
+  transaction.textContent = `在 CCDExplorer 核验结算交易 ${shortHash(record.transaction.hash)} ↗`
+  links.append(qualification, fingerprint, transaction)
+  detail.append(fields, links)
+  entry.append(summary, detail)
+  return entry
 }
 
 function renderCurrentSessionEvidence() {
@@ -1310,4 +1643,5 @@ render()
 void loadLocalSessionHistory()
 void loadServiceSpec()
 loadEvidence()
+loadPublishedMarketSettlements()
 loadAgentEvaluation()

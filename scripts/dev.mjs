@@ -19,6 +19,7 @@ import {
 } from '@concordium/web-sdk'
 import { ConcordiumGRPCNodeClient, credentials } from '@concordium/web-sdk/nodejs'
 import { decideNextReserve } from '../src/decision.mjs'
+import { createConfirmedSettlement, isConfirmedSettlement } from '../src/market-history.mjs'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 loadLocalEnv(resolve(repoRoot, '.env'))
@@ -172,17 +173,20 @@ function readSessionHistory() {
     // finalized transaction hash.
     const legacyEntries = Array.isArray(parsed.entries) ? parsed.entries : []
     return {
-      version: 2,
+      version: 3,
       activity: Array.isArray(parsed.activity)
         ? parsed.activity.slice(0, 10)
         : legacyEntries.filter((item) => item?.kind === 'activity').slice(0, 10),
       evidence: Array.isArray(parsed.evidence)
         ? parsed.evidence.slice(0, 10)
         : legacyEntries.filter((item) => item?.kind === 'evidence').slice(0, 10),
+      settlements: Array.isArray(parsed.settlements)
+        ? parsed.settlements.filter(isConfirmedSettlement).slice(0, 10)
+        : [],
       current: normalizeStoredVerification(parsed.current),
     }
   } catch {
-    return { version: 2, activity: [], evidence: [], current: null }
+    return { version: 3, activity: [], evidence: [], settlements: [], current: null }
   }
 }
 
@@ -191,6 +195,12 @@ function writeSessionHistory(history) {
   const temporaryPath = `${sessionHistoryPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify(history, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
   renameSync(temporaryPath, sessionHistoryPath)
+}
+
+function sameContractAddress(left, right) {
+  return Boolean(
+    left && right && String(left.index) === String(right.index) && String(left.subindex) === String(right.subindex),
+  )
 }
 
 function validateActivityEntry(value) {
@@ -278,6 +288,41 @@ function persistVerifiedEvidence(label, hash) {
   writeSessionHistory(history)
 }
 
+function persistConfirmedSettlement(view, transaction) {
+  if (!verified.initialization || variantName(view?.state?.phase) !== 'Settled') return
+  try {
+    const spec = loadServiceSpec()
+    const record = createConfirmedSettlement({
+      initialization: verified.initialization,
+      view,
+      transaction,
+      serviceSpec: spec,
+    })
+    const history = readSessionHistory()
+    history.settlements = [
+      record,
+      ...history.settlements.filter((entry) => !sameContractAddress(entry.instance, record.instance)),
+    ].slice(0, 10)
+    writeSessionHistory(history)
+  } catch (error) {
+    console.error(`Could not persist confirmed settlement: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function persistSettlementFromCurrentState(view) {
+  if (!verified.initialization || variantName(view?.state?.phase) !== 'Settled') return
+  const history = readSessionHistory()
+  const finalization = history.evidence.find((entry) => (
+    entry.label === '链上结算' && sameContractAddress(entry.instance, verified.initialization.address)
+  ))
+  if (!finalization) return
+  persistConfirmedSettlement(view, {
+    hash: finalization.hash,
+    explorerUrl: finalization.explorerUrl,
+    confirmedAt: finalization.at,
+  })
+}
+
 async function handleTestnetApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/testnet/status') {
     const artifactStatus = inspectArtifacts()
@@ -286,6 +331,7 @@ async function handleTestnetApi(request, response, url) {
     if (view) {
       restoreObservedRound(view)
       persistVerifiedContext()
+      persistSettlementFromCurrentState(view)
     }
     sendJson(response, 200, {
       ok: true,
@@ -546,6 +592,13 @@ async function verifyContractUpdate({ hash, sender, receiveName, amountMicroCcd,
     ['surplus_bid.finalize', '链上结算'],
   ]).get(receiveName) ?? receiveName
   persistVerifiedEvidence(label, hash)
+  if (receiveName === 'surplus_bid.finalize') {
+    persistConfirmedSettlement(view, {
+      hash,
+      explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
+      confirmedAt: new Date().toISOString(),
+    })
+  }
   return {
     final: true,
     view,
