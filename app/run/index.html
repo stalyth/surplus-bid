@@ -32,8 +32,9 @@
         <p class="eyebrow">SurplusBid market · Concordium Testnet</p>
         <h1>发现容量价格，<br />分享交易剩余。</h1>
         <p class="hero-copy">
-          一个持续运行的标准化容量市场。买家以隐藏报价表达需求，Concordium 合约执行赢家选择、CCD 结算与退款；成交记录为后续容量窗口提供价格信号，交易剩余则按公开规则由参与方分享。
+          AI API 提供方 Agent 发布即将过期的优先执行容量，买方 Agent 用隐藏报价竞争。Concordium 合约选择赢家、结算 CCD，并把真实成交沉淀为下一窗口的价格信号。
         </p>
+        <p class="surplus-definition"><strong>交易剩余</strong> = 买家报价 − 卖家底价；中点定价让买卖双方都保留参与收益。</p>
         <div class="capacity-highlights" aria-label="容量市场摘要">
           <div><span>当前窗口供给</span><strong>2 个优先执行单位</strong></div>
           <div><span>价格信号</span><strong>来自已确认成交记录</strong></div>
@@ -45,15 +46,19 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Verified transaction journey</p>
-            <h2 id="judge-journey-title">一条成交，从策略证据到链上结果</h2>
+            <h2 id="judge-journey-title">当前协议的证据路径</h2>
           </div>
           <span class="badge badge-neutral" id="judge-journey-badge">正在读取证据</span>
         </div>
-        <p class="judge-journey-intro" id="judge-journey-summary">公开页正在读取随仓库提交的 Testnet 证据快照；无需连接钱包。</p>
-        <article class="decision-evidence" id="judge-decision-evidence" aria-label="Seller Agent 决策证据"></article>
-        <ol class="journey-steps" id="judge-journey-steps" aria-label="链上交易步骤"></ol>
+        <p class="judge-journey-intro" id="judge-journey-summary">公开页仅读取随仓库提交、且属于当前协议的 Testnet 证据快照；无需连接钱包。</p>
         <article class="journey-result" id="judge-journey-result" aria-label="链上结算结果"></article>
-        <p class="journey-limit">公开观察页只展示已提交的脱敏证据；Seller Agent 评测与这笔 Testnet 结算是两组独立证据，不声称模型直接签名或提交了该实例。</p>
+        <article class="decision-evidence" id="judge-decision-evidence" aria-label="Seller Agent 决策证据"></article>
+        <div class="journey-detail-heading">
+          <strong>完整链上轨迹</strong>
+          <span>10 笔交易均可在 CCDExplorer 独立打开</span>
+        </div>
+        <ol class="journey-steps" id="judge-journey-steps" aria-label="链上交易步骤"></ol>
+        <p class="journey-limit">公开观察页只展示已提交的脱敏证据；Seller Agent 评测与链上结算是独立证据，不声称模型直接签名或提交任何实例。</p>
       </section>
 
       <section class="flow-shell local-live-only" aria-labelledby="flow-title">

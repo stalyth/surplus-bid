@@ -1,19 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "network": "Concordium Testnet",
-  "protocolVersion": "shared-reveal-v2",
-  "protocolStatus": "历史单赢家证据：当前 batch-allocation-v3 双赢家容量分配模块尚待部署并生成新的 Testnet 证据。",
-  "recordedAt": "2026-10-28T08:19:24.707Z",
-  "dataSource": "Repository snapshot assembled from transactions finalized by the local-live client and the finalized settlement view.",
-  "limitations": [
-    "The Seller Agent evaluation and the Testnet settlement are separate evidence sets; this snapshot does not claim that the evaluated model call directly submitted the on-chain transaction.",
-    "Commit-reveal hides amounts only during the commitment window. Revealed amounts are public afterwards.",
-    "Winner-address verification is read-only and does not prove account control or off-chain API delivery."
-  ],
+  "protocolVersion": "batch-allocation-v3",
+  "evidenceStatus": "verified",
+  "recordedAt": "2026-10-29T07:37:01.008Z",
+  "dataSource": "Repository snapshot assembled from local-live transactions finalized on Concordium Testnet and the finalized contract view.",
   "service": {
     "name": "Priority AI Analysis",
-    "capacityUnits": 1,
-    "serviceId": "2ae5fd44b1af35dabfd2e1a41f7c12ca10d5df44a6cc23429e634ae8ee7cbc0a",
+    "capacityUnits": 2,
+    "serviceId": "dd90e12bd93f12b9247d64471453c58578f860e71dc5e63c1a246d55ce06b84e",
     "specUrl": "/service-spec.json"
   },
   "sellerDecisionEvidence": {
@@ -23,12 +18,7 @@
     "marketSignal": "strong",
     "finalAction": "raise",
     "finalReserveMicroCcd": "2200000",
-    "reasonSignals": [
-      "soldRate",
-      "averageBidderCount",
-      "previousAverageSurplus",
-      "supplyChange"
-    ],
+    "reasonSignals": ["soldRate", "averageBidderCount", "previousAverageSurplus", "supplyChange"],
     "evaluation": {
       "finalDecisionCorrect": 24,
       "totalRuns": 24,
@@ -37,91 +27,130 @@
     "sameRunAsChainJourney": false,
     "evidenceUrl": "/evidence/seller-agent-evaluation.json"
   },
+  "limitations": [
+    "Seller Agent evaluation is independent from this Testnet settlement.",
+    "Commit-reveal hides amounts only during the commitment window. Revealed amounts are public afterwards.",
+    "Winner-address verification is read-only and does not prove account control or off-chain API delivery."
+  ],
   "chainJourney": {
     "instance": {
-      "index": "13026",
+      "index": "13035",
       "subindex": "0",
-      "contractUrl": "https://ccdexplorer.io/testnet/contract/13026/0"
+      "contractUrl": "https://ccdexplorer.io/testnet/contract/13035/0"
     },
     "steps": [
       {
         "key": "initialize",
         "label": "创建容量窗口",
-        "detail": "0 CCD 初始化；service_id 绑定当前容量规格摘要。",
-        "at": "2026-10-28T08:12:28.333Z",
-        "hash": "44161b548bacbc26ec7a0532a477eaf48ab12b8c20d3ab83e7957b4413f9efd7",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/44161b548bacbc26ec7a0532a477eaf48ab12b8c20d3ab83e7957b4413f9efd7"
+        "detail": "0 CCD 初始化；service_id 绑定当前双容量规格摘要。",
+        "at": "2026-10-29T07:23:34.956Z",
+        "hash": "36cd0a563dc0148fc268d998149e80341ed951b7a7051e9a283ad961bec98c96",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/36cd0a563dc0148fc268d998149e80341ed951b7a7051e9a283ad961bec98c96"
       },
       {
         "key": "start_round",
-        "label": "发布隐藏报价窗口",
-        "detail": "卖家提交底价承诺并写入承诺期、统一揭示期与最多两份报价。",
+        "label": "发布容量窗口",
+        "detail": "卖家锁定底价承诺，并固定 3 分钟承诺期、3 分钟统一揭示期、2 个容量单位和最多 3 份订单。",
         "at": null,
-        "evidenceNote": "The finalized start_round hash was restored from local session state; its confirmation timestamp was not retained.",
-        "hash": "1dba172e9c1ff9660fb3f1c90f96b25f76d2c4b07f7987733b875a5c3b59b2ad",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/1dba172e9c1ff9660fb3f1c90f96b25f76d2c4b07f7987733b875a5c3b59b2ad"
+        "evidenceNote": "最终确认的 start_round 哈希已由本地会话与最终 view 核对；确认时间未保留。",
+        "hash": "bbc962b9138cb1e52b9cc9718a407faf43b55ece7fa688df1e2c98fc9e4e09b4",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/bbc962b9138cb1e52b9cc9718a407faf43b55ece7fa688df1e2c98fc9e4e09b4"
       },
       {
         "key": "commit_bid_1",
-        "label": "买家账户提交承诺 1/2",
-        "detail": "承诺交易只公开哈希与链上顺序，不在承诺期公开报价金额。",
-        "at": "2026-10-28T08:13:40.148Z",
-        "hash": "247c8d7a146e7f13d6cfa563fe2898faf2d2b8321f24f4bf13814675359ca561",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/247c8d7a146e7f13d6cfa563fe2898faf2d2b8321f24f4bf13814675359ca561"
+        "label": "买家账户提交隐藏承诺 1/3",
+        "detail": "承诺期仅公开哈希和链上顺序，不公开报价金额。",
+        "at": "2026-10-29T07:31:54.695Z",
+        "hash": "99d2fffc153ee56f4551bd24d4c3fba058df97f7490c401b059eeac77d06612c",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/99d2fffc153ee56f4551bd24d4c3fba058df97f7490c401b059eeac77d06612c"
       },
       {
         "key": "commit_bid_2",
-        "label": "买家账户提交承诺 2/2",
-        "detail": "第二份报价承诺进入同一合约实例。",
-        "at": "2026-10-28T08:13:55.496Z",
-        "hash": "f60465519edfac57a63f1acec289e6999de60c749f548e40a029a2467d718114",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/f60465519edfac57a63f1acec289e6999de60c749f548e40a029a2467d718114"
+        "label": "买家账户提交隐藏承诺 2/3",
+        "detail": "第二份一单位报价承诺进入同一容量窗口。",
+        "at": "2026-10-29T07:32:11.580Z",
+        "hash": "8aed36111eb4bd603ba61402a6750cd2a4b5adb5d3978730af96ba25f2a466a9",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/8aed36111eb4bd603ba61402a6750cd2a4b5adb5d3978730af96ba25f2a466a9"
       },
       {
-        "key": "reveal_bid_1",
-        "label": "买家账户揭示报价 1/2",
-        "detail": "统一揭示期内验证承诺，并补足至完整报价。",
-        "at": "2026-10-28T08:16:29.207Z",
-        "hash": "61a17907836b7796dce1ee2b42c77c8dd3b5b19e5d1e218f4e23e8d1d2349731",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/61a17907836b7796dce1ee2b42c77c8dd3b5b19e5d1e218f4e23e8d1d2349731"
-      },
-      {
-        "key": "reveal_bid_2",
-        "label": "买家账户揭示报价 2/2",
-        "detail": "第二份报价在同一揭示期完成验证。",
-        "at": "2026-10-28T08:16:46.197Z",
-        "hash": "12c775e99767b4f019c39ac91890c2ce5ef0994ed67c33d7fb32c5b79a8aba9d",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/12c775e99767b4f019c39ac91890c2ce5ef0994ed67c33d7fb32c5b79a8aba9d"
+        "key": "commit_bid_3",
+        "label": "买家账户提交隐藏承诺 3/3",
+        "detail": "第三份一单位报价承诺进入同一容量窗口。",
+        "at": "2026-10-29T07:32:27.981Z",
+        "hash": "1d4116fe8c035dfd11e90bc8029067b2f7f5d33e6477627f4f8a26179d53c6a4",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/1d4116fe8c035dfd11e90bc8029067b2f7f5d33e6477627f4f8a26179d53c6a4"
       },
       {
         "key": "reveal_reserve",
         "label": "卖家揭示底价",
-        "detail": "链上验证卖家底价与承诺一致，公开底价 2.2 CCD。",
-        "at": "2026-10-28T08:16:59.505Z",
-        "hash": "30bfa5c3bc5602983f8e46a6e1f29f659b59bd08465a3519c15aca402d4178dd",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/30bfa5c3bc5602983f8e46a6e1f29f659b59bd08465a3519c15aca402d4178dd"
+        "detail": "统一揭示期验证卖家承诺并公开 1.8 CCD 单位底价。",
+        "at": "2026-10-29T07:33:54.115Z",
+        "hash": "0c5be410e3727ef783f3b448f66604e5146a18fd476d13b73f2f2104ee4908a3",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/0c5be410e3727ef783f3b448f66604e5146a18fd476d13b73f2f2104ee4908a3"
+      },
+      {
+        "key": "reveal_bid_1",
+        "label": "买家账户揭示报价 1/3",
+        "detail": "统一揭示期内验证报价承诺，并按需要补足托管。",
+        "at": "2026-10-29T07:34:13.257Z",
+        "hash": "cc586bfb60b78d051cebcd327c236be7e8ffa9c5969c5184dbe401398d5d8caf",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/cc586bfb60b78d051cebcd327c236be7e8ffa9c5969c5184dbe401398d5d8caf"
+      },
+      {
+        "key": "reveal_bid_2",
+        "label": "买家账户揭示报价 2/3",
+        "detail": "第二份报价在同一揭示窗口完成验证。",
+        "at": "2026-10-29T07:34:26.450Z",
+        "hash": "ebb9ed5bd35098a3099f0b717b7647add01e71a7079c031262416f67ecebb428",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/ebb9ed5bd35098a3099f0b717b7647add01e71a7079c031262416f67ecebb428"
+      },
+      {
+        "key": "reveal_bid_3",
+        "label": "买家账户揭示报价 3/3",
+        "detail": "第三份报价在同一揭示窗口完成验证。",
+        "at": "2026-10-29T07:34:39.157Z",
+        "hash": "ae47a4f9cb082a7c5c9ef8345e152b7fc58f46ec7fa124942fbb19f7e004bb97",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/ae47a4f9cb082a7c5c9ef8345e152b7fc58f46ec7fa124942fbb19f7e004bb97"
       },
       {
         "key": "finalize",
-        "label": "链上选择赢家并结算",
-        "detail": "合约按固定规则选择赢家、计算中点成交价，并原子完成卖家收款、平台费和买家退款。",
-        "at": "2026-10-28T08:19:24.707Z",
-        "hash": "617df0481d8023575ef364108081f041ad14243a449308d27bdd630b14efc32b",
-        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/617df0481d8023575ef364108081f041ad14243a449308d27bdd630b14efc32b"
+        "label": "链上选择两位赢家并结算",
+        "detail": "合约按公开规则分配两个容量单位，独立计算两位赢家的中点价格，并原子完成分账与退款。",
+        "at": "2026-10-29T07:37:01.008Z",
+        "hash": "3c21c1f327cc6b2bbbf621497226c28df70223def46c3c8fdb2eb56032fe9934",
+        "explorerUrl": "https://ccdexplorer.io/testnet/transaction/3c21c1f327cc6b2bbbf621497226c28df70223def46c3c8fdb2eb56032fe9934"
       }
     ],
     "result": {
       "phase": "Settled",
-      "winner": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
-      "reserveMicroCcd": "2200000",
-      "winningBidMicroCcd": "4000000",
-      "clearingPriceMicroCcd": "3100000",
-      "surplusMicroCcd": "1800000",
-      "platformFeeMicroCcd": "180000",
-      "winnerRefundMicroCcd": "810000",
-      "totalRefundMicroCcd": "3810000",
-      "sellerReceivesMicroCcd": "5010000",
-      "totalDepositedMicroCcd": "9000000",
+      "winners": [
+        "4akDwpkxtZpgTsbFLGD9ogiFf6JVvpBpaeJDboFZZrGTpabhGP",
+        "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU"
+      ],
+      "allocations": [
+        {
+          "winner": "4akDwpkxtZpgTsbFLGD9ogiFf6JVvpBpaeJDboFZZrGTpabhGP",
+          "bidMicroCcd": "2100000",
+          "reserveMicroCcd": "1800000",
+          "surplusMicroCcd": "300000",
+          "clearingPriceMicroCcd": "1950000"
+        },
+        {
+          "winner": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU",
+          "bidMicroCcd": "2200000",
+          "reserveMicroCcd": "1800000",
+          "surplusMicroCcd": "400000",
+          "clearingPriceMicroCcd": "2000000"
+        }
+      ],
+      "reserveMicroCcd": "1800000",
+      "averageWinningBidMicroCcd": "2150000",
+      "averageClearingPriceMicroCcd": "1975000",
+      "totalSurplusMicroCcd": "700000",
+      "platformFeeMicroCcd": "70000",
+      "totalRefundMicroCcd": "2315000",
+      "sellerReceivesMicroCcd": "5915000",
+      "totalDepositedMicroCcd": "8300000",
       "contractBalanceMicroCcd": "0",
       "reconciled": true
     }

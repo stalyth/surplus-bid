@@ -1,4 +1,4 @@
-import { access, copyFile, cp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,6 +7,7 @@ const distRoot = resolve(repoRoot, 'dist')
 
 await requireFile('contracts/sealed-auction/module.wasm.v1', '先运行 pnpm check 生成合约 Wasm。')
 await requireFile('contracts/sealed-auction/schema.bin', '先运行 pnpm check 生成合约 schema。')
+await rm(resolve(distRoot, 'evidence'), { recursive: true, force: true })
 
 await Promise.all([
   mkdir(resolve(distRoot, 'app'), { recursive: true }),

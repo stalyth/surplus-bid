@@ -76,7 +76,7 @@
       "previousSupplyUnits": 1,
       "nextSupplyUnits": 1,
       "rounds": [
-        { "id": "contract-13010-round-1", "confirmed": true, "outcome": "settled", "reserveMicroCcd": "2000000", "winningBidsMicroCcd": ["4000000"], "bidderCount": 2, "supplyUnits": 1 }
+        { "id": "legacy-single-allocation-fixture", "confirmed": true, "outcome": "settled", "reserveMicroCcd": "2000000", "winningBidsMicroCcd": ["4000000"], "bidderCount": 2, "supplyUnits": 1 }
       ],
       "contextNote": "B 未揭示；当前只有这一轮真实 Testnet 证据。"
     },

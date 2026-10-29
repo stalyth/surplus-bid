@@ -818,37 +818,7 @@ function loadRecordedVerification() {
       }
       return local
     }
-    const evidence = JSON.parse(readFileSync(resolve(repoRoot, 'public/evidence/sealed-auction-testnet.json'), 'utf8'))
-    // The committed public snapshot documents an older protocol and remains
-    // useful for the read-only page, but must never become the live instance
-    // context for the current Wasm.
-    if (evidence.module?.reference !== artifact.moduleReference) {
-      return { deployment: null, initialization: null, round: null }
-    }
-    const current = evidence.currentCoreRound
-    const address = current?.instance?.address ?? evidence.instance?.address
-    const initialization = current?.transactions?.initialization ?? evidence.instance?.initialization
-    const sender = current?.instance?.seller ?? evidence.instance?.viewAtInitializationBlock?.seller
-    const contractUrl = current?.instance?.contractUrl ?? evidence.instance?.contractUrl
-    if (!address || !initialization || typeof sender !== 'string') throw new Error('记录的实例信息不完整。')
-    parseAccount(sender)
-    return {
-      deployment: {
-        hash: evidence.module.deployment.hash,
-        moduleReference: artifact.moduleReference,
-        blockHash: evidence.module.deployment.blockHash,
-        explorerUrl: evidence.module.deployment.explorerUrl,
-      },
-      initialization: {
-        hash: initialization.hash,
-        sender,
-        address: { index: String(address.index), subindex: String(address.subindex) },
-        blockHash: initialization.blockHash ?? null,
-        explorerUrl: initialization.explorerUrl,
-        contractUrl,
-      },
-      round: null,
-    }
+    return { deployment: null, initialization: null, round: null }
   } catch (error) {
     console.error(`Could not restore recorded Testnet instance: ${error instanceof Error ? error.message : String(error)}`)
     return { deployment: null, initialization: null, round: null }

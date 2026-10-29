@@ -31,7 +31,6 @@ const runtime = await loadRuntimeConfig()
 let activity = []
 let walletConnection = null
 let observedWalletProvider = null
-let historicalEvidence = null
 let judgeJourney = null
 let confirmedSettlements = []
 let publishedSettlements = []
@@ -1113,24 +1112,8 @@ function setMessage(message, tone) {
 }
 
 async function loadEvidence() {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 4_000)
-  try {
-    const response = await fetch('/evidence/sealed-auction-testnet.json', {
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    historicalEvidence = await response.json()
-    renderEvidencePanel()
-    renderMarketHistory()
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    elements.evidenceSummary.textContent = `证据读取失败：${detail}`
-    elements.evidenceSummary.dataset.tone = 'error'
-  } finally {
-    clearTimeout(timeout)
-  }
+  renderEvidencePanel()
+  renderMarketHistory()
 }
 
 async function loadJudgeJourney() {
@@ -1138,7 +1121,7 @@ async function loadJudgeJourney() {
     const response = await fetch('/evidence/judge-journey.json', { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const payload = await response.json()
-    if (!Array.isArray(payload?.chainJourney?.steps) || !payload?.chainJourney?.result) {
+    if (payload?.evidenceStatus !== 'pending' && (!Array.isArray(payload?.chainJourney?.steps) || !payload?.chainJourney?.result)) {
       throw new Error('证据快照缺少链上步骤或结算结果')
     }
     judgeJourney = payload
@@ -1166,6 +1149,18 @@ function renderJudgeJourney() {
     const empty = document.createElement('p')
     empty.className = 'journey-empty'
     empty.textContent = '请检查随仓库提交的 evidence/judge-journey.json 是否可访问。'
+    elements.judgeJourneySteps.append(empty)
+    return
+  }
+
+  if (judgeJourney.evidenceStatus === 'pending') {
+    elements.judgeJourneyBadge.textContent = '当前协议 · 等待 Testnet 结算'
+    elements.judgeJourneyBadge.className = 'badge badge-warning'
+    elements.judgeJourneySummary.textContent = judgeJourney.protocolStatus || '当前协议尚无可公开核验的完整 Testnet 交易轨迹。页面不会回退展示旧协议实例。'
+    renderJudgeDecision(judgeJourney.sellerDecisionEvidence)
+    const empty = document.createElement('p')
+    empty.className = 'journey-empty'
+    empty.textContent = '等待当前双容量协议完成初始化、承诺、统一揭示和结算，并由 Testnet view 与结算交易核对后再写入本页。'
     elements.judgeJourneySteps.append(empty)
     return
   }
@@ -1277,12 +1272,21 @@ function renderJudgeResult(chain) {
   heading.append(title, link)
 
   const grid = document.createElement('dl')
+  const winners = Array.isArray(result.winners)
+    ? result.winners
+    : result.winner ? [result.winner] : []
+  const winnerLabel = winners.length > 0
+    ? winners.map((winner) => shortAccountAddress(winner)).join('、')
+    : '无赢家'
+  const averageWinningBid = result.averageWinningBidMicroCcd ?? result.winningBidMicroCcd
+  const averageClearingPrice = result.averageClearingPriceMicroCcd ?? result.clearingPriceMicroCcd
+  const totalSurplus = result.totalSurplusMicroCcd ?? result.surplusMicroCcd
   const fields = [
-    ['赢家', shortAccountAddress(result.winner)],
+    ['赢家', winnerLabel],
     ['卖家底价', `${formatMicroCcd(result.reserveMicroCcd)} CCD`],
-    ['赢家报价', `${formatMicroCcd(result.winningBidMicroCcd)} CCD`],
-    ['成交价', `${formatMicroCcd(result.clearingPriceMicroCcd)} CCD`],
-    ['交易剩余', `${formatMicroCcd(result.surplusMicroCcd)} CCD`],
+    ['赢家报价均价', `${formatMicroCcd(averageWinningBid)} CCD / 单位`],
+    ['成交均价', `${formatMicroCcd(averageClearingPrice)} CCD / 单位`],
+    ['交易剩余合计', `${formatMicroCcd(totalSurplus)} CCD`],
     ['平台费', `${formatMicroCcd(result.platformFeeMicroCcd)} CCD`],
     ['买家退款合计', `${formatMicroCcd(result.totalRefundMicroCcd)} CCD`],
     ['卖家所得', `${formatMicroCcd(result.sellerReceivesMicroCcd)} CCD`],
@@ -1298,12 +1302,26 @@ function renderJudgeResult(chain) {
     row.append(term, description)
     grid.append(row)
   }
+  const allocations = document.createElement('div')
+  allocations.className = 'journey-allocation-grid'
+  for (const [index, allocation] of (result.allocations ?? []).entries()) {
+    const card = document.createElement('div')
+    card.className = 'journey-allocation'
+    const winner = document.createElement('strong')
+    winner.textContent = `赢家 ${index + 1} · ${shortAccountAddress(allocation.winner)}`
+    const formula = document.createElement('code')
+    formula.textContent = `报价 ${formatMicroCcd(allocation.bidMicroCcd)} − 底价 ${formatMicroCcd(allocation.reserveMicroCcd)} = 剩余 ${formatMicroCcd(allocation.surplusMicroCcd)} CCD；中点成交价 ${formatMicroCcd(allocation.clearingPriceMicroCcd)} CCD`
+    card.append(winner, formula)
+    allocations.append(card)
+  }
   const check = document.createElement('p')
   check.className = result.reconciled ? 'journey-reconciled' : 'journey-unreconciled'
   check.textContent = result.reconciled
     ? `资金守恒：${formatMicroCcd(result.totalDepositedMicroCcd)} CCD = 卖家所得 + 平台费 + 买家退款，结算后合约余额为 0 CCD。`
     : '资金核对未通过；不得把该快照视为已核验结算。'
-  elements.judgeJourneyResult.append(heading, grid, check)
+  elements.judgeJourneyResult.append(heading, grid)
+  if (allocations.childElementCount > 0) elements.judgeJourneyResult.append(allocations)
+  elements.judgeJourneyResult.append(check)
 }
 
 async function loadPublishedMarketSettlements() {
@@ -1344,7 +1362,12 @@ function renderEvidencePanel() {
     renderCurrentSessionEvidence()
     return
   }
-  if (historicalEvidence) renderHistoricalEvidence(historicalEvidence)
+  elements.evidenceBadge.textContent = '等待本会话核验'
+  elements.evidenceBadge.className = 'badge badge-warning'
+  elements.evidenceSummary.dataset.tone = 'neutral'
+  elements.evidenceSummary.textContent = '尚未选定当前协议的本地 Testnet 实例。旧协议快照不会作为当前工作台的默认交易记录。'
+  elements.evidenceList.replaceChildren()
+  elements.settlementBreakdown.hidden = true
 }
 
 function renderMarketHistory() {
@@ -1377,8 +1400,6 @@ function marketHistoryRecords() {
   for (const record of publishedSettlements) {
     if (!records.some((entry) => sameInstance(entry.instance, record.instance))) records.push(record)
   }
-  const legacy = legacySettlementRecord(historicalEvidence)
-  if (legacy && !records.some((record) => sameInstance(record.instance, legacy.instance))) records.push(legacy)
   return records
     .map((record) => ({
       ...record,
@@ -1472,11 +1493,12 @@ function renderMarketSignalChart(records) {
   const svg = document.createElementNS(ns, 'svg')
   svg.setAttribute('viewBox', '0 0 760 218')
   svg.setAttribute('preserveAspectRatio', 'none')
-  const values = records.flatMap((record) => [
-    Number(BigInt(record.reserveMicroCcd)),
-    Number(BigInt(record.clearingPriceMicroCcd)),
-    Number(BigInt(record.winningBidMicroCcd)),
-  ])
+  const series = [
+    ['reserveMicroCcd', (record) => String(record.reserveMicroCcd), '#ffd37a'],
+    ['clearingPriceMicroCcd', historyAveragePrice, '#86f7b8'],
+    ['winningBidMicroCcd', historyAverageBid, '#98c7ff'],
+  ]
+  const values = records.flatMap((record) => series.map(([, amountFor]) => Number(BigInt(amountFor(record)))))
   const lower = Math.min(...values)
   const upper = Math.max(...values)
   const padding = Math.max(Math.round((upper - lower) * 0.16), 100_000)
@@ -1509,13 +1531,8 @@ function renderMarketSignalChart(records) {
     label.textContent = `${formatMicroCcd(BigInt(Math.round(value)))} CCD`
     svg.append(label)
   }
-  const series = [
-    ['reserveMicroCcd', '#ffd37a'],
-    ['clearingPriceMicroCcd', '#86f7b8'],
-    ['winningBidMicroCcd', '#98c7ff'],
-  ]
-  for (const [key, color] of series) {
-    const points = records.map((record, index) => `${x(index)},${y(Number(BigInt(record[key])))}`).join(' ')
+  for (const [key, amountFor, color] of series) {
+    const points = records.map((record, index) => `${x(index)},${y(Number(BigInt(amountFor(record))))}`).join(' ')
     const path = document.createElementNS(ns, 'polyline')
     path.setAttribute('points', points)
     path.setAttribute('fill', 'none')
@@ -1526,11 +1543,11 @@ function renderMarketSignalChart(records) {
     records.forEach((record, index) => {
       const point = document.createElementNS(ns, 'circle')
       point.setAttribute('cx', String(x(index)))
-      point.setAttribute('cy', String(y(Number(BigInt(record[key])))))
+      point.setAttribute('cy', String(y(Number(BigInt(amountFor(record))))) )
       point.setAttribute('r', '4')
       point.setAttribute('fill', color)
       const title = document.createElementNS(ns, 'title')
-      title.textContent = `<${record.instance.index},${record.instance.subindex}> · ${formatMicroCcd(record[key])} CCD`
+      title.textContent = `<${record.instance.index},${record.instance.subindex}> · ${formatMicroCcd(amountFor(record))} CCD`
       point.append(title)
       svg.append(point)
     })
@@ -1599,38 +1616,6 @@ function historyWinners(record) {
     }]
   }
   return []
-}
-
-function legacySettlementRecord(evidence) {
-  const round = evidence?.currentCoreRound
-  const allocation = round?.finalView?.allocation
-  const transaction = round?.transactions?.finalize
-  if (round?.finalView?.phase !== 'Settled' || !allocation || !transaction?.hash || !round.instance?.address) return null
-  const totalDeposited = BigInt(round.finalView.totalDepositedMicroCcd)
-  const buyerRefund = BigInt(allocation.buyerRefundMicroCcd)
-  const platformFee = BigInt(allocation.platformFeeMicroCcd)
-  const sellerReceives = BigInt(round.finalView.sellerTotalMicroCcd)
-  return {
-    version: 1,
-    settledAt: evidence.recordedAt ? `${evidence.recordedAt}T00:00:00.000Z` : null,
-    instance: { index: String(round.instance.address.index), subindex: String(round.instance.address.subindex) },
-    contractUrl: round.instance.contractUrl,
-    transaction: { hash: transaction.hash, explorerUrl: transaction.explorerUrl },
-    service: { id: null, name: '历史容量规格（旧协议）', capacityUnits: null, matchesCurrentSpec: false },
-    seller: round.instance.seller,
-    winner: allocation.winner,
-    reserveMicroCcd: allocation.priceMicroCcd ? (BigInt(allocation.priceMicroCcd) * 2n - BigInt(allocation.winningBidMicroCcd)).toString() : '0',
-    winningBidMicroCcd: allocation.winningBidMicroCcd,
-    clearingPriceMicroCcd: allocation.priceMicroCcd,
-    surplusMicroCcd: (BigInt(allocation.winningBidMicroCcd) - (BigInt(allocation.priceMicroCcd) * 2n - BigInt(allocation.winningBidMicroCcd))).toString(),
-    platformFeeMicroCcd: allocation.platformFeeMicroCcd,
-    buyerRefundMicroCcd: allocation.buyerRefundMicroCcd,
-    totalRefundMicroCcd: allocation.buyerRefundMicroCcd,
-    sellerReceivesMicroCcd: round.finalView.sellerTotalMicroCcd,
-    totalDepositedMicroCcd: round.finalView.totalDepositedMicroCcd,
-    reconciled: totalDeposited === buyerRefund + platformFee + sellerReceives,
-    protocol: '历史顺序揭示协议；不计入当前双赢家容量市场的价格信号。',
-  }
 }
 
 function renderMarketHistoryEntry(record) {
@@ -1738,35 +1723,6 @@ function renderCurrentSessionEvidence() {
 
 function sameInstance(left, right) {
   return left && right && String(left.index) === String(right.index) && String(left.subindex) === String(right.subindex)
-}
-
-function renderHistoricalEvidence(evidence) {
-  const round = evidence.currentCoreRound
-  const address = `<${round.instance.address.index},${round.instance.address.subindex}>`
-  elements.evidenceSummary.dataset.tone = 'neutral'
-  elements.evidenceBadge.textContent = '历史证据快照'
-  elements.evidenceBadge.className = 'badge badge-neutral'
-  elements.evidenceSummary.textContent = `历史 Testnet 证据（旧顺序揭示协议）· 合约 ${address} · ${round.finalView.phase} · 成交价 ${formatMicroCcd(round.finalView.allocation.priceMicroCcd)} CCD · 合约余额 ${formatMicroCcd(round.finalView.contractBalanceMicroCcd)} CCD`
-
-  const rows = Object.entries(round.transactions).map(([step, item]) => ({
-    label: historicalTransactionLabel(step, item),
-    hash: item.hash,
-    explorerUrl: item.explorerUrl,
-    confirmedAt: null,
-  }))
-  renderEvidenceRows(rows, '历史快照')
-  elements.settlementBreakdown.hidden = true
-}
-
-function historicalTransactionLabel(step, item) {
-  if (step === 'initialization') return '创建拍卖实例'
-  if (step === 'startRound') return '开始隐藏报价轮次'
-  if (step === 'sellerRevealReserve') return '卖家揭示底价'
-  if (step === 'finalize') return '链上结算'
-  const account = typeof item?.bidder === 'string' ? shortAccountAddress(item.bidder) : '未知账户'
-  if (step.startsWith('commitBidder')) return `${account} · 提交承诺`
-  if (step.startsWith('revealBidder')) return `${account} · 揭示报价`
-  return step
 }
 
 function renderSettlementBreakdown(view) {
