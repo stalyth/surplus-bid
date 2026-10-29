@@ -1,7 +1,12 @@
-//! W2D2 single-round commit-reveal auction. Concordium Testnet only.
+//! W2D2 single-round sealed-bid capacity allocation. Concordium Testnet only.
 use concordium_std::*;
 
-pub const MAX_BIDS: u16 = 16;
+/// This MVP sells two identical capacity units in each window. Every buyer can
+/// submit one one-unit order, so no partial-fill state is needed.
+pub const CAPACITY_UNITS: u16 = 2;
+/// Bounded storage and bounded settlement work. The third valid reveal is the
+/// deterministic losing order when two higher eligible bids exist.
+pub const MAX_BIDS: u16 = 3;
 pub const ROUND_ID: u64 = 1;
 const RESERVE_DOMAIN: &[u8] = b"SURPLUS_BID_RESERVE_V1";
 const BID_DOMAIN: &[u8] = b"SURPLUS_BID_BID_V1";
@@ -21,7 +26,6 @@ pub struct StartParams {
     pub reserve_commitment: Commitment,
     pub commit_end: Timestamp,
     pub reveal_end: Timestamp,
-    pub max_bids: u16,
 }
 
 #[derive(Debug, Serialize, SchemaType, Clone, PartialEq, Eq)]
@@ -120,6 +124,8 @@ pub struct RoundStartedEvent {
     pub reserve_commitment: Commitment,
     pub commit_end: Timestamp,
     pub reveal_end: Timestamp,
+    pub capacity_units: u16,
+    pub max_bids: u16,
 }
 
 #[derive(Debug, Serialize, SchemaType, Clone, PartialEq, Eq)]
@@ -262,9 +268,7 @@ fn start_round(
     let now = ctx.metadata().slot_time();
     ensure!(
         now < params.commit_end
-            && params.commit_end < params.reveal_end
-            && params.max_bids > 0
-            && params.max_bids <= MAX_BIDS,
+            && params.commit_end < params.reveal_end,
         Error::InvalidRules
     );
     host.account_balance(state.config.fee_recipient)
@@ -274,6 +278,8 @@ fn start_round(
         reserve_commitment: params.reserve_commitment,
         commit_end: params.commit_end,
         reveal_end: params.reveal_end,
+        capacity_units: CAPACITY_UNITS,
+        max_bids: MAX_BIDS,
     }))?;
     let state = host.state_mut();
     state.phase = Phase::Commit;
@@ -305,7 +311,7 @@ fn commit_bid(
     ensure!(ctx.metadata().slot_time() < round.commit_end, Error::WrongTime);
     ensure_eq!(amount, state.config.guarantee, Error::WrongDeposit);
     ensure!(!state.seller.is_alias(&bidder), Error::SellerCannotBid);
-    ensure!(state.bids.len() < usize::from(round.max_bids), Error::BidLimit);
+    ensure!(state.bids.len() < usize::from(MAX_BIDS), Error::BidLimit);
     ensure!(
         !state.bids.iter().any(|item| item.bidder.is_alias(&bidder)),
         Error::DuplicateBid
@@ -496,14 +502,21 @@ fn finalize(
     ensure_eq!(host.self_balance(), state.total_deposited, Error::BalanceMismatch);
     let reserve = state.reserve.ok_or(Error::WrongPhase)?;
 
-    let winner = state
+    // This is a two-unit batch allocation, not a single-item auction. Each
+    // eligible bid represents one identical capacity unit. Rank by disclosed
+    // unit bid, then use the immutable commit sequence to break ties.
+    let mut ranked: Vec<(usize, Amount, u16)> = state
         .bids
         .iter()
         .enumerate()
         .filter_map(|(index, item)| item.revealed_bid.map(|bid| (index, bid, item.sequence)))
         .filter(|(_, bid, _)| *bid >= reserve)
-        .max_by(|left, right| left.1.cmp(&right.1).then_with(|| right.2.cmp(&left.2)))
-        .map(|(index, _, _)| index);
+        .collect();
+    ranked.sort_by(|left, right| {
+        right.1.cmp(&left.1).then_with(|| left.2.cmp(&right.2))
+    });
+    ranked.truncate(usize::from(CAPACITY_UNITS));
+    let winners: Vec<usize> = ranked.into_iter().map(|(index, _, _)| index).collect();
 
     let mut allocations = Vec::new();
     let mut refunds = Vec::new();
@@ -517,7 +530,7 @@ fn finalize(
                     .checked_add(item.escrow.micro_ccd)
                     .ok_or(Error::Arithmetic)?;
             }
-            Some(bid) if Some(index) == winner => {
+            Some(bid) if winners.contains(&index) => {
                 let allocation = winning_allocation(
                     item.bidder,
                     item.sequence,
@@ -563,7 +576,7 @@ fn finalize(
 
     let seller = state.seller;
     let fee_recipient = state.config.fee_recipient;
-    let phase = if winner.is_some() { Phase::Settled } else { Phase::NoSale };
+    let phase = if winners.is_empty() { Phase::NoSale } else { Phase::Settled };
     host.state_mut().phase = phase;
     host.state_mut().allocations = allocations.clone();
     for (bidder, refund) in refunds {
@@ -573,7 +586,7 @@ fn finalize(
     transfer(host, &fee_recipient, Amount::from_micro_ccd(platform_total))?;
     ensure_eq!(host.self_balance(), Amount::zero(), Error::BalanceMismatch);
 
-    if let Some(winner_allocation) = allocations.iter().find(|item| item.won) {
+    for winner_allocation in allocations.iter().filter(|item| item.won) {
         logger.log(&Event::WinnerSettled(WinnerSettledEvent {
             round_id: ROUND_ID,
             bidder: winner_allocation.bidder,

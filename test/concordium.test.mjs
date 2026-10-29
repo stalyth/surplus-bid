@@ -203,7 +203,9 @@ test('prepares a seller-bound start_round with fixed 3 + 3 minute windows', asyn
     assert.equal(plan.parameters.reserve_commitment.length, 32)
     assert.equal(plan.parameters.commit_end, '1790000180000')
     assert.equal(plan.parameters.reveal_end, '1790000360000')
-    assert.equal(plan.parameters.max_bids, START_ROUND_RULES.maxBids)
+    assert.equal(plan.parameters.max_bids, undefined)
+    assert.equal(START_ROUND_RULES.capacityUnits, 2)
+    assert.equal(START_ROUND_RULES.maxBids, 3)
   } finally {
     globalThis.window = originalWindow
   }
@@ -247,6 +249,18 @@ test('prepares a buyer-entered decimal bid commitment with a distinct buyer and 
     assert.equal(plan.amountMicroCcd, '4250000')
     assert.equal(plan.saltHex.length, 64)
     assert.equal(plan.commitment.length, 32)
+  } finally {
+    globalThis.window = originalWindow
+  }
+})
+
+test('allows a buyer commitment below the 2 CCD guarantee because the guarantee is not a minimum bid', async () => {
+  const originalWindow = globalThis.window
+  globalThis.window = { concordiumSDK: sdk }
+  try {
+    const buyer = '4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU'
+    const plan = await prepareBidCommitment({ accounts: [buyer] }, INSTANCE, parseCcdToMicroCcd('1.8'))
+    assert.equal(plan.amountMicroCcd, '1800000')
   } finally {
     globalThis.window = originalWindow
   }

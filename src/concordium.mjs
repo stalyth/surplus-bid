@@ -10,7 +10,8 @@ export const START_ROUND_RULES = Object.freeze({
   guaranteeCcd: 2,
   commitDurationMs: 3 * 60_000,
   revealDurationMs: 3 * 60_000,
-  maxBids: 2,
+  capacityUnits: 2,
+  maxBids: 3,
 })
 export class ConcordiumClientError extends Error {
   constructor(code, message) {
@@ -258,7 +259,6 @@ export async function prepareStartRound(connection, initialization, {
       reserve_commitment: Array.from(reserveCommitment),
       commit_end: String(commitEnd),
       reveal_end: String(revealEnd),
-      max_bids: START_ROUND_RULES.maxBids,
     },
   }
 }
@@ -312,9 +312,8 @@ export async function submitCancelRound(connection, initialization, { timeoutMs 
 
 export async function prepareBidCommitment(connection, initialization, amountMicroCcd) {
   const sdk = requireTransactionSdk()
-  const guaranteeMicroCcd = BigInt(START_ROUND_RULES.guaranteeCcd) * 1_000_000n
-  if (!initialization?.address || typeof amountMicroCcd !== 'string' || !/^(0|[1-9][0-9]*)$/.test(amountMicroCcd) || BigInt(amountMicroCcd) < guaranteeMicroCcd) {
-    throw new ConcordiumClientError('INVALID_BID', '报价必须不低于 2 CCD，且最多保留 6 位小数。')
+  if (!initialization?.address || typeof amountMicroCcd !== 'string' || !/^(0|[1-9][0-9]*)$/.test(amountMicroCcd)) {
+    throw new ConcordiumClientError('INVALID_BID', '报价必须是非负 CCD 金额，且最多保留 6 位小数。')
   }
   const bidder = connection.accounts[0]
   if (bidder === initialization.sender) {

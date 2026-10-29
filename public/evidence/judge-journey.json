@@ -1,6 +1,8 @@
 {
   "version": 1,
   "network": "Concordium Testnet",
+  "protocolVersion": "shared-reveal-v2",
+  "protocolStatus": "历史单赢家证据：当前 batch-allocation-v3 双赢家容量分配模块尚待部署并生成新的 Testnet 证据。",
   "recordedAt": "2026-10-28T08:19:24.707Z",
   "dataSource": "Repository snapshot assembled from transactions finalized by the local-live client and the finalized settlement view.",
   "limitations": [

@@ -7,6 +7,8 @@ use surplus_bid::{
 const SELLER: AccountAddress = AccountAddress([0; 32]);
 const A: AccountAddress = AccountAddress([1; 32]);
 const B: AccountAddress = AccountAddress([2; 32]);
+const C: AccountAddress = AccountAddress([3; 32]);
+const D: AccountAddress = AccountAddress([4; 32]);
 const PLATFORM: AccountAddress = AccountAddress([30; 32]);
 const GUARANTEE: Amount = Amount::from_ccd(2);
 const COMMIT_END: u64 = 1_000;
@@ -31,10 +33,21 @@ const B_COMMITMENT: Commitment = [
     133, 6, 240, 61, 246, 244, 167, 33, 228, 217, 152, 44, 188, 12, 166, 208,
     206, 217, 238, 2, 161, 224, 62, 140, 136, 206, 211, 85, 171, 226, 199, 127,
 ];
-
+const B_FIVE_COMMITMENT: Commitment = [
+    86, 116, 113, 174, 140, 122, 233, 91, 206, 50, 228, 243, 178, 86, 211, 82,
+    137, 80, 156, 27, 35, 169, 128, 147, 144, 200, 165, 101, 188, 170, 253, 79,
+];
+const C_FIVE_COMMITMENT: Commitment = [
+    100, 180, 127, 157, 153, 13, 8, 247, 204, 81, 167, 231, 211, 205, 35, 29,
+    128, 79, 133, 153, 126, 104, 158, 144, 107, 148, 87, 236, 0, 171, 107, 22,
+];
+const C_TIE_COMMITMENT: Commitment = [
+    191, 91, 4, 5, 126, 247, 124, 21, 230, 246, 227, 83, 153, 12, 205, 57, 195,
+    129, 81, 226, 240, 130, 39, 64, 71, 117, 80, 100, 128, 54, 57, 174,
+];
 fn setup() -> (Chain, ContractAddress) {
     let mut chain = Chain::new();
-    for account in [SELLER, A, B] {
+    for account in [SELLER, A, B, C, D] {
         chain.create_account(Account::new(account, Amount::from_ccd(10_000)));
     }
     chain.create_account(Account::new(PLATFORM, Amount::zero()));
@@ -129,9 +142,20 @@ fn commitment(
             (amount, 4) if amount == Amount::from_ccd(6) => A_TIE_COMMITMENT,
             _ => panic!("unsupported A commitment vector"),
         }
+    } else if account == B {
+        match (amount, salt_byte) {
+            (amount, 2) if amount == Amount::from_ccd(6) => B_COMMITMENT,
+            (amount, 2) if amount == Amount::from_ccd(5) => B_FIVE_COMMITMENT,
+            _ => panic!("unsupported B commitment vector"),
+        }
+    } else if account == C {
+        match (amount, salt_byte) {
+            (amount, 3) if amount == Amount::from_ccd(5) => C_FIVE_COMMITMENT,
+            (amount, 3) if amount == Amount::from_ccd(6) => C_TIE_COMMITMENT,
+            _ => panic!("unsupported C commitment vector"),
+        }
     } else {
-        assert_eq!((account, amount, salt_byte), (B, Amount::from_ccd(6), 2));
-        B_COMMITMENT
+        panic!("unsupported commitment account")
     }
 }
 
@@ -149,7 +173,6 @@ fn start(
             reserve_commitment: commitment(true, address, SELLER, reserve, 9),
             commit_end: Timestamp::from_timestamp_millis(COMMIT_END),
             reveal_end: Timestamp::from_timestamp_millis(REVEAL_END),
-            max_bids: 2,
         },
         GUARANTEE,
     )
@@ -250,15 +273,16 @@ fn rejected(
 }
 
 #[test]
-fn sealed_two_buyer_flow_settles_and_conserves_every_microccd() {
+fn sealed_three_buyer_flow_allocates_two_units_and_conserves_every_microccd() {
     let (mut chain, address) = setup();
     let reserve = Amount::from_ccd(2);
-    let before = [SELLER, A, B, PLATFORM].map(|account| balance(&chain, account));
+    let before = [SELLER, A, B, C, PLATFORM].map(|account| balance(&chain, account));
 
     let started = start(&mut chain, address, reserve);
     let committed_a = commit(&mut chain, address, A, Amount::from_ccd(4), 1);
     let committed_b = commit(&mut chain, address, B, Amount::from_ccd(6), 2);
-    assert_eq!(chain.contract_balance(address), Some(Amount::from_ccd(6)));
+    let committed_c = commit(&mut chain, address, C, Amount::from_ccd(5), 3);
+    assert_eq!(chain.contract_balance(address), Some(Amount::from_ccd(8)));
 
     chain
         .tick_block_time(Duration::from_millis(COMMIT_END))
@@ -268,7 +292,8 @@ fn sealed_two_buyer_flow_settles_and_conserves_every_microccd() {
     assert_eq!(view(&chain, address).phase, Phase::Reveal);
     let seller_reveal = reveal_reserve(&mut chain, address, reserve);
     let revealed_b = reveal_bid(&mut chain, address, B, Amount::from_ccd(6), 2);
-    assert_eq!(chain.contract_balance(address), Some(Amount::from_ccd(12)));
+    let revealed_c = reveal_bid(&mut chain, address, C, Amount::from_ccd(5), 3);
+    assert_eq!(chain.contract_balance(address), Some(Amount::from_ccd(17)));
 
     chain
         .tick_block_time(Duration::from_millis(REVEAL_END - COMMIT_END))
@@ -276,18 +301,18 @@ fn sealed_two_buyer_flow_settles_and_conserves_every_microccd() {
     let finalized = update_empty(&mut chain, address, A, "finalize").expect("finalize");
     let state = view(&chain, address);
     assert_eq!(state.phase, Phase::Settled);
-    assert_eq!(state.allocations.len(), 2);
-    let winner = state
-        .allocations
-        .iter()
-        .find(|item| item.won)
-        .expect("winner allocation");
-    assert_eq!(winner.bid, Amount::from_ccd(6));
-    assert_eq!(winner.price, Amount::from_ccd(4));
-    assert_eq!(winner.buyer_fee, Amount::from_micro_ccd(200_000));
-    assert_eq!(winner.buyer_refund, Amount::from_micro_ccd(1_800_000));
-    assert_eq!(winner.seller_receives, Amount::from_micro_ccd(3_800_000));
-    assert_eq!(winner.platform_receives, Amount::from_micro_ccd(400_000));
+    assert_eq!(state.allocations.len(), 3);
+    let winners: Vec<_> = state.allocations.iter().filter(|item| item.won).collect();
+    assert_eq!(winners.len(), 2);
+    assert_eq!(winners[0].bidder, B);
+    assert_eq!(winners[0].price, Amount::from_ccd(4));
+    assert_eq!(winners[0].buyer_fee, Amount::from_micro_ccd(200_000));
+    assert_eq!(winners[1].bidder, C);
+    assert_eq!(winners[1].price, Amount::from_micro_ccd(3_500_000));
+    assert_eq!(winners[1].buyer_fee, Amount::from_micro_ccd(150_000));
+    let loser = state.allocations.iter().find(|item| item.bidder == A).expect("loser allocation");
+    assert!(!loser.won);
+    assert_eq!(loser.buyer_refund, Amount::from_ccd(4));
     assert_eq!(chain.contract_balance(address), Some(Amount::zero()));
 
     assert_eq!(
@@ -299,18 +324,23 @@ fn sealed_two_buyer_flow_settles_and_conserves_every_microccd() {
     );
     assert_eq!(
         balance(&chain, B),
-        before[2]
-            - Amount::from_micro_ccd(4_200_000)
+        before[2] - Amount::from_micro_ccd(4_200_000)
             - committed_b.transaction_fee
             - revealed_b.transaction_fee
     );
     assert_eq!(
+        balance(&chain, C),
+        before[3] - Amount::from_micro_ccd(3_650_000)
+            - committed_c.transaction_fee
+            - revealed_c.transaction_fee
+    );
+    assert_eq!(
         balance(&chain, SELLER),
-        before[0] + Amount::from_micro_ccd(3_800_000)
+        before[0] + Amount::from_micro_ccd(7_150_000)
             - started.transaction_fee
             - seller_reveal.transaction_fee
     );
-    assert_eq!(balance(&chain, PLATFORM), before[3] + Amount::from_micro_ccd(400_000));
+    assert_eq!(balance(&chain, PLATFORM), before[4] + Amount::from_micro_ccd(700_000));
 
     let settled_state = view(&chain, address);
     rejected(
@@ -468,29 +498,45 @@ fn empty_round_and_below_reserve_bid_close_without_trapped_funds() {
 }
 
 #[test]
-fn equal_revealed_bids_use_earlier_commitment_sequence() {
+fn equal_revealed_bids_use_earlier_commitment_sequence_at_the_capacity_cutoff() {
     let (mut chain, address) = setup();
     start(&mut chain, address, Amount::from_ccd(2));
     commit(&mut chain, address, A, Amount::from_ccd(6), 4);
     commit(&mut chain, address, B, Amount::from_ccd(6), 2);
+    commit(&mut chain, address, C, Amount::from_ccd(6), 3);
     chain
         .tick_block_time(Duration::from_millis(COMMIT_END))
         .expect("advance to shared reveal");
     reveal_reserve(&mut chain, address, Amount::from_ccd(2));
     reveal_bid(&mut chain, address, A, Amount::from_ccd(6), 4);
     reveal_bid(&mut chain, address, B, Amount::from_ccd(6), 2);
+    reveal_bid(&mut chain, address, C, Amount::from_ccd(6), 3);
     chain
         .tick_block_time(Duration::from_millis(REVEAL_END - COMMIT_END))
         .expect("advance to finalize");
     update_empty(&mut chain, address, SELLER, "finalize").expect("finalize tie");
 
     let state = view(&chain, address);
-    let winner = state
-        .allocations
-        .iter()
-        .find(|allocation| allocation.won)
-        .expect("winner");
-    assert_eq!(winner.bidder, A);
-    assert_eq!(winner.sequence, 0);
+    let winners: Vec<_> = state.allocations.iter().filter(|allocation| allocation.won).collect();
+    assert_eq!(winners.len(), 2);
+    assert_eq!(winners[0].bidder, A);
+    assert_eq!(winners[0].sequence, 0);
+    assert_eq!(winners[1].bidder, B);
+    assert_eq!(winners[1].sequence, 1);
+    assert!(!state.allocations.iter().find(|allocation| allocation.bidder == C).expect("loser").won);
     assert_eq!(chain.contract_balance(address), Some(Amount::zero()));
+}
+
+#[test]
+fn a_fourth_commitment_is_rejected_before_it_can_expand_bounded_settlement_work() {
+    let (mut chain, address) = setup();
+    start(&mut chain, address, Amount::from_ccd(2));
+    commit(&mut chain, address, A, Amount::from_ccd(4), 1);
+    commit(&mut chain, address, B, Amount::from_ccd(5), 2);
+    commit(&mut chain, address, C, Amount::from_ccd(6), 3);
+    rejected(
+        update(&mut chain, address, D, "commit_bid", &[7u8; 32], GUARANTEE),
+        Error::BidLimit,
+    );
+    assert_eq!(view(&chain, address).bids.len(), 3);
 }

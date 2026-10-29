@@ -35,7 +35,7 @@
           一个持续运行的标准化容量市场。买家以隐藏报价表达需求，Concordium 合约执行赢家选择、CCD 结算与退款；成交记录为后续容量窗口提供价格信号，交易剩余则按公开规则由参与方分享。
         </p>
         <div class="capacity-highlights" aria-label="容量市场摘要">
-          <div><span>当前窗口供给</span><strong>1 个优先执行名额</strong></div>
+          <div><span>当前窗口供给</span><strong>2 个优先执行单位</strong></div>
           <div><span>价格信号</span><strong>来自已确认成交记录</strong></div>
           <div><span>报价机制</span><strong>Commit-reveal 隐藏报价</strong></div>
         </div>
@@ -70,16 +70,16 @@
             <div class="panel-title-row">
               <div>
                 <h3>Priority AI Analysis</h3>
-                <p>卖家释放一份会过期的优先执行容量；容量、规则与服务标识在报价前固定。</p>
+                <p>卖家释放两个会过期的优先执行单位；容量、规则与服务标识在报价前固定。</p>
               </div>
               <span class="status-pill" id="auction-phase">等待发布</span>
             </div>
 
             <dl class="rule-grid">
               <div><dt>卖家底价</dt><dd>承诺期隐藏</dd></div>
-              <div><dt>容量</dt><dd>1</dd></div>
+              <div><dt>容量</dt><dd>2 个单位</dd></div>
               <div><dt>阶段时长</dt><dd>3 + 3 分钟</dd></div>
-              <div><dt>最多报价</dt><dd>2</dd></div>
+              <div><dt>最多报价</dt><dd>3</dd></div>
             </dl>
 
             <div class="formula-card">
@@ -123,7 +123,12 @@
                 <h5 id="seller-agent-title">决定下一容量窗口的底价</h5>
                 <p>Seller Agent 根据已确认的历史提出底价建议。代码会核验涨幅、供给变化与交易剩余约束；卖家始终在钱包中确认发布。</p>
                 <button class="button button-secondary" id="seller-decision-button" type="button">获取底价建议</button>
-                <div class="testnet-status" id="seller-decision-status" aria-live="polite">尚未调用模型。模型失败或证据不足时保持 2 CCD，且不会开放链上开始按钮。</div>
+                <label class="bid-amount-control" id="seller-reserve-control" for="seller-reserve-input" hidden>
+                  <span>本轮卖家底价（CCD）</span>
+                  <input id="seller-reserve-input" type="text" inputmode="decimal" autocomplete="off" aria-describedby="seller-reserve-hint" disabled />
+                  <small id="seller-reserve-hint">默认填入 Seller Agent 的最终建议；卖家可手动修改，并在钱包中最终确认。</small>
+                </label>
+                <div class="testnet-status" id="seller-decision-status" aria-live="polite">尚未调用模型。获得建议后会默认填入卖家底价；卖家可修改并在钱包中确认发布。</div>
               </section>
               <p class="seller-agent-locked" id="seller-agent-locked" hidden>本窗口底价已承诺上链，Seller Agent 不能再修改。</p>
               <section class="round-progress" id="round-progress" aria-labelledby="round-progress-title">
@@ -152,7 +157,7 @@
                   <a id="seller-settlement-explorer" target="_blank" rel="noreferrer">查看链上结果 ↗</a>
                 </div>
                 <dl>
-                  <div><dt>成交价</dt><dd id="seller-settlement-price">—</dd></div>
+                  <div><dt>赢家成交均价</dt><dd id="seller-settlement-price">—</dd></div>
                   <div><dt>卖家链上收款</dt><dd id="seller-settlement-proceeds">—</dd></div>
                   <div><dt>合约余额</dt><dd id="seller-settlement-balance">—</dd></div>
                 </dl>
@@ -171,7 +176,7 @@
                 <label class="bid-amount-control" for="bid-amount-input">
                   <span>我的最高报价（CCD）</span>
                   <input id="bid-amount-input" type="text" inputmode="decimal" autocomplete="off" value="4" aria-describedby="bid-amount-hint" disabled />
-                  <small id="bid-amount-hint">最低 2 CCD，最多 6 位小数；承诺期内金额不会公开。</small>
+                  <small id="bid-amount-hint">可输入任意非负 CCD 金额，最多 6 位小数；承诺期内金额不会公开。</small>
                 </label>
                 <button class="button button-secondary" id="commit-bid-button" type="button" disabled>提交我的隐藏报价 · 先锁定 2 CCD</button>
               </div>
@@ -186,7 +191,7 @@
               </div>
               <section class="winner-verification" id="winner-verification" hidden aria-live="polite">
                 <h4>链上赢家核验</h4>
-                <p>读取已结算实例的 <code>view</code>，核对当前账户是否等于链上赢家，同时核对容量规格摘要。此步骤不签名、不发 Token，也不代表 API 已交付。</p>
+                <p>读取已结算实例的 <code>view</code>，核对当前账户是否属于链上赢家，并核对容量规格摘要。此步骤不签名、不发 Token，也不代表 API 已交付。</p>
                 <button class="button button-secondary" id="verify-winner-button" type="button" disabled>核验当前账户</button>
                 <div class="testnet-status" id="winner-verification-status">结算后可进行只读核验。</div>
               </section>
@@ -221,14 +226,14 @@
           </div>
           <span class="badge badge-neutral" id="market-signal-badge">等待已确认样本</span>
         </div>
-        <p class="market-signal-intro">只统计与当前容量规格指纹一致、已最终确认且资金核对通过的成交。该面板提供早期观察，不把样本统计称为公允价格。</p>
+        <p class="market-signal-intro">只统计与当前容量市场标识一致、已最终确认且资金核对通过的成交。每笔记录按实际售出单位计算成交均价；该面板提供早期观察，不把样本统计称为公允价格。</p>
         <div class="market-signal-layout">
           <section class="market-signal-summary" aria-label="价格信号摘要">
             <div class="signal-metrics" id="market-signal-metrics"></div>
             <p class="signal-reading" id="market-signal-reading">正在读取已确认成交…</p>
           </section>
           <figure class="signal-chart" aria-labelledby="signal-chart-title">
-            <figcaption id="signal-chart-title">已确认成交的价格构成</figcaption>
+            <figcaption id="signal-chart-title">已确认成交的单位价格构成</figcaption>
             <div class="signal-legend" aria-label="图例">
               <span><i class="signal-dot reserve"></i>卖家底价</span>
               <span><i class="signal-dot price"></i>成交价</span>
@@ -247,7 +252,7 @@
           </div>
           <span class="badge badge-neutral" id="market-history-badge">只读链上结算</span>
         </div>
-        <p class="market-history-intro">仅收录已经在 Concordium Testnet 最终确认、且资金分配可核对的容量成交。不同规格指纹或历史协议不会被混入当前规格的价格信号。</p>
+        <p class="market-history-intro">仅收录已经在 Concordium Testnet 最终确认、且资金分配可核对的容量成交。每笔保留已售单位数、赢家明细与成交均价；旧协议记录不会混入当前市场信号。</p>
         <div class="market-history-summary" id="market-history-summary">正在读取已确认成交记录…</div>
         <div class="market-history-list" id="market-history-list"></div>
       </section>

@@ -2,12 +2,12 @@ export const MICRO_CCD = 1_000_000n
 
 export const DEMO_RULES = Object.freeze({
   service: 'Priority AI Analysis',
-  capacity: 1,
+  capacity: 2,
   guaranteeMicro: 2n * MICRO_CCD,
   commitMinutes: 5,
   sellerRevealMinutes: 2,
   buyerRevealMinutes: 2,
-  maxBids: 2,
+  maxBids: 3,
   pricingRule: 'Midpoint preview',
   feeRule: '10% of trade surplus, shared equally; waived below 10% of price',
 })
@@ -15,6 +15,7 @@ export const DEMO_RULES = Object.freeze({
 export const DEMO_AGENTS = Object.freeze([
   Object.freeze({ id: 'account-36pddm-jkfkyp', name: '账户 36pDdm…Jkfkyp', bidMicro: 4n * MICRO_CCD, commitment: 'sha256:account-36pddm-demo' }),
   Object.freeze({ id: 'account-4jtmeo-5epu', name: '账户 4jTMeo…5ePU', bidMicro: 6n * MICRO_CCD, commitment: 'sha256:account-4jtmeo-demo' }),
+  Object.freeze({ id: 'account-4awg-nddj', name: '账户 4aWGuj…BSDjP4', bidMicro: 5n * MICRO_CCD, commitment: 'sha256:account-4awg-demo' }),
 ])
 
 export class DemoRuleError extends Error {
@@ -114,19 +115,19 @@ export function finalizeDemoAuction(auction) {
     }
   }
 
-  const winner = ranked[0]
-  const allocations = auction.bids.map((bid) => bid.agentId === winner.agentId
+  const winnerIds = new Set(ranked.slice(0, auction.capacity).map((bid) => bid.agentId))
+  const allocations = auction.bids.map((bid) => winnerIds.has(bid.agentId)
     ? settleWinningBid(bid, auction.reserveMicro)
     : { ...bid, won: false, refundMicro: bid.escrowMicro })
-  const winningAllocation = allocations.find((item) => item.won)
+  const winners = allocations.filter((item) => item.won)
   return {
     ...auction,
     phase: 'Finalized',
     settlement: {
       allocations,
       sellerGuaranteeRefundMicro: auction.guaranteeMicro,
-      sellerReceivesMicro: winningAllocation.sellerReceivesMicro,
-      platformReceivesMicro: winningAllocation.platformFeeMicro,
+      sellerReceivesMicro: winners.reduce((total, item) => total + item.sellerReceivesMicro, 0n),
+      platformReceivesMicro: winners.reduce((total, item) => total + item.platformFeeMicro, 0n),
       contractBalanceMicro: 0n,
     },
   }

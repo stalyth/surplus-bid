@@ -37,20 +37,7 @@ let confirmedSettlements = []
 let publishedSettlements = []
 let serviceSpec = null
 let serviceSpecError = null
-let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, transactions: [], pending: null, busy: false, agentBusy: false, winnerVerification: null }
-
-const DEMO_SELLER_DECISION_INPUT = Object.freeze({
-  dataLabel: 'demo data',
-  currentReserveMicroCcd: '2000000',
-  previousSupplyUnits: 1,
-  nextSupplyUnits: 1,
-  rounds: [
-    { id: 'demo-r1', confirmed: true, outcome: 'settled', reserveMicroCcd: '2000000', winningBidsMicroCcd: ['4800000'], bidderCount: 1, supplyUnits: 1 },
-    { id: 'demo-r2', confirmed: true, outcome: 'settled', reserveMicroCcd: '2000000', winningBidsMicroCcd: ['5400000'], bidderCount: 2, supplyUnits: 1 },
-    { id: 'demo-r3', confirmed: true, outcome: 'settled', reserveMicroCcd: '2000000', winningBidsMicroCcd: ['6000000'], bidderCount: 2, supplyUnits: 1 },
-  ],
-  contextNote: '连续成交且参与人数增加；这是 W2D3 固定评测用的 demo data。',
-})
+let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, sellerHistory: null, sellerReserveMicroCcd: null, transactions: [], pending: null, busy: false, agentBusy: false, winnerVerification: null }
 
 const elements = {
   auctionPhase: byId('auction-phase'),
@@ -67,6 +54,8 @@ const elements = {
   walletAccountSelect: byId('wallet-account-select'),
   walletAccountNotice: byId('wallet-account-notice'),
   sellerDecisionButton: byId('seller-decision-button'),
+  sellerReserveControl: byId('seller-reserve-control'),
+  sellerReserveInput: byId('seller-reserve-input'),
   sellerDecisionStatus: byId('seller-decision-status'),
   sellerAgentCard: byId('seller-agent-card'),
   sellerAgentLocked: byId('seller-agent-locked'),
@@ -129,24 +118,27 @@ elements.sellerDecisionButton.addEventListener('click', async () => {
   if (!runtime.agentApi || testnet.agentBusy) return
   testnet.agentBusy = true
   testnet.sellerDecision = null
+  testnet.sellerReserveMicroCcd = null
   elements.sellerDecisionStatus.textContent = '正在调用 Seller Agent，并等待代码裁决…'
   elements.sellerDecisionStatus.dataset.tone = 'neutral'
   render()
   try {
     const payload = await requestJson('/api/agent/decide', {
       method: 'POST',
-      body: { taskId: `seller-next-round-${Date.now()}`, input: DEMO_SELLER_DECISION_INPUT },
+      body: { taskId: `seller-next-round-${Date.now()}` },
       timeoutMs: 20_000,
       timeoutMessage: 'Seller Agent 请求超时；没有生成可进入钱包流程的底价建议。',
     })
     testnet.sellerDecision = payload.decision
+    testnet.sellerHistory = payload.history
     const decision = payload.decision
+    testnet.sellerReserveMicroCcd = decision.final.reserveMicroCcd
     const reserve = formatMicroCcd(decision.final.reserveMicroCcd)
     const override = decision.ruleOverride
       ? `；代码覆盖：${decision.ruleOverride.map((item) => item.code).join(', ')}`
       : '；代码未覆盖模型提议'
     elements.sellerDecisionStatus.textContent = [
-      `数据：${decision.dataLabel}；模型：${decision.model}；prompt：${decision.promptVersion}`,
+      `数据：本地已核验 Testnet 历史 ${payload.history.recordCount} 笔；模型：${decision.model}；prompt：${decision.promptVersion}`,
       `模型判断：${decision.proposed.marketSignal}；最终动作：${decision.final.action}；最终底价：${reserve} CCD${override}`,
       decision.proposed.reason,
     ].join('\n')
@@ -161,6 +153,16 @@ elements.sellerDecisionButton.addEventListener('click', async () => {
     testnet.agentBusy = false
     render()
   }
+})
+
+elements.sellerReserveInput.addEventListener('input', () => {
+  if (!testnet.sellerDecision) return
+  try {
+    testnet.sellerReserveMicroCcd = parseCcdToMicroCcd(elements.sellerReserveInput.value).toString()
+  } catch {
+    testnet.sellerReserveMicroCcd = null
+  }
+  render()
 })
 
 elements.walletButton.addEventListener('click', async () => {
@@ -274,6 +276,8 @@ elements.initContractButton.addEventListener('click', () => {
     testnet.startPlan = null
     testnet.bidPlan = null
     testnet.sellerDecision = null
+    testnet.sellerHistory = null
+    testnet.sellerReserveMicroCcd = null
     testnet.winnerVerification = null
     testnet.transactions = []
     trackVerifiedTransaction('创建容量窗口', verified.initialization)
@@ -298,8 +302,8 @@ elements.verifyWinnerButton.addEventListener('click', async () => {
     })
     testnet.winnerVerification = result
     elements.winnerVerificationStatus.textContent = result.eligible
-      ? `核验通过：${shortAccountAddress(result.account)} 与链上赢家一致。尚未签名、未发放 Token、未交付 API 额度。`
-      : `核验未通过：${result.reason}${result.winner ? ` 链上赢家为 ${shortAccountAddress(result.winner)}。` : ''}`
+      ? `核验通过：${shortAccountAddress(result.account)} 属于链上赢家。`
+      : `核验未通过：${result.reason}${result.winners?.length ? ` 链上赢家为 ${result.winners.map(shortAccountAddress).join('、')}。` : ''}`
     elements.winnerVerificationStatus.dataset.tone = result.eligible ? 'success' : 'error'
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -399,16 +403,15 @@ elements.startRoundButton.addEventListener('click', () => {
   runTestnetAction('start_round', async () => {
     const connection = transactionConnection()
     const decision = testnet.sellerDecision
-    if (!decision || decision.final.action === 'needs_human') {
-      throw new ConcordiumClientError('SELLER_DECISION_REQUIRED', '请先生成通过代码裁决的 Seller Agent 底价建议；needs_human 不会进入钱包流程。')
-    }
+    if (!decision) throw new ConcordiumClientError('SELLER_DECISION_REQUIRED', '请先获取 Seller Agent 底价建议。')
+    const selectedReserveMicroCcd = parseCcdToMicroCcd(elements.sellerReserveInput.value)
     const plan = await prepareStartRound(connection, testnet.initialization, {
-      reserveMicroCcd: decision.final.reserveMicroCcd,
+      reserveMicroCcd: selectedReserveMicroCcd,
     })
     saveReserveRevealBackup(plan)
     testnet.startPlan = plan
     setTestnetStatus(
-      `Seller Agent 最终底价为 ${formatMicroCcd(plan.reserveMicroCcd)} CCD；已生成底价承诺，并将揭示所需的 32 字节盐保存在当前浏览器。\n接下来钱包将请求调用 start_round：锁定 2 CCD 测试保证金；承诺期 ${START_ROUND_RULES.commitDurationMs / 60_000} 分钟，卖家与买家共享 ${START_ROUND_RULES.revealDurationMs / 60_000} 分钟揭示期。`,
+      `本轮底价为 ${formatMicroCcd(plan.reserveMicroCcd)} CCD（${plan.reserveMicroCcd === decision.final.reserveMicroCcd ? '采用 Seller Agent 建议' : '卖家手动调整'}）；已生成底价承诺，并将揭示所需的 32 字节盐保存在当前浏览器。\n接下来钱包将请求调用 start_round：锁定 2 CCD 测试保证金；承诺期 ${START_ROUND_RULES.commitDurationMs / 60_000} 分钟，卖家与买家共享 ${START_ROUND_RULES.revealDurationMs / 60_000} 分钟揭示期。`,
       'success',
     )
     const hash = await submitStartRound(connection, testnet.initialization, plan)
@@ -479,6 +482,14 @@ function render() {
   elements.sellerDecisionButton.textContent = !runtime.agentApi
     ? '真实评测结果已记录'
     : testnet.agentBusy ? 'Seller Agent 正在分析…' : testnet.sellerDecision ? '重新获取底价建议' : '获取底价建议'
+  const hasSellerReserve = testnet.sellerDecision !== null
+  elements.sellerReserveControl.hidden = !hasSellerReserve
+  elements.sellerReserveInput.disabled = testnet.agentBusy || activeRound || testnet.busy
+  if (hasSellerReserve && document.activeElement !== elements.sellerReserveInput) {
+    elements.sellerReserveInput.value = testnet.sellerReserveMicroCcd === null
+      ? ''
+      : formatMicroCcd(testnet.sellerReserveMicroCcd)
+  }
   elements.auctionPhase.textContent = livePhase ? phaseLabel(livePhase) : '等待发布'
   elements.auctionId.textContent = liveWindow
     ? `<${liveWindow.index},${liveWindow.subindex}>`
@@ -557,9 +568,9 @@ function serviceBindingMatches() {
 
 function renderWinnerVerification() {
   const phase = phaseName(testnet.view?.state?.phase)
-  const winner = chainWinner()
+  const winners = chainWinners()
   const currentAccount = walletConnection?.accounts?.[0] ?? null
-  const visible = runtime.walletActions && testnet.initialization && phase === 'Settled' && currentAccount === winner
+  const visible = runtime.walletActions && testnet.initialization && phase === 'Settled' && winners.includes(currentAccount)
   elements.winnerVerification.hidden = !visible
   if (!visible) return
   const bound = serviceBindingMatches()
@@ -573,9 +584,10 @@ function renderWinnerVerification() {
   }
 }
 
-function chainWinner() {
-  const winner = (testnet.view?.state?.allocations ?? []).find((entry) => entry.won === true)?.bidder
-  return typeof winner === 'string' && winner.length > 0 ? winner : null
+function chainWinners() {
+  return (testnet.view?.state?.allocations ?? [])
+    .filter((entry) => entry.won === true && typeof entry.bidder === 'string' && entry.bidder.length > 0)
+    .map((entry) => entry.bidder)
 }
 
 function renderSellerSettlementSummary() {
@@ -583,8 +595,8 @@ function renderSellerSettlementSummary() {
   const currentAccount = walletConnection?.accounts?.[0] ?? null
   const isSeller = currentAccount !== null && currentAccount === testnet.initialization?.sender
   const allocations = Array.isArray(testnet.view?.state?.allocations) ? testnet.view.state.allocations : []
-  const winner = allocations.find((entry) => entry.won === true)
-  const visible = runtime.walletActions && phase === 'Settled' && isSeller && winner
+  const winners = allocations.filter((entry) => entry.won === true)
+  const visible = runtime.walletActions && phase === 'Settled' && isSeller && winners.length > 0
   elements.sellerSettlementSummary.hidden = !visible
   if (!visible) return
 
@@ -592,7 +604,8 @@ function renderSellerSettlementSummary() {
   const refunds = allocations.reduce((total, entry) => total + BigInt(entry.buyer_refund ?? 0), 0n)
   const platform = allocations.reduce((total, entry) => total + BigInt(entry.platform_receives ?? 0), 0n)
   const sellerReceives = totalDeposited - refunds - platform
-  elements.sellerSettlementPrice.textContent = `${formatMicroCcd(winner.price ?? 0)} CCD`
+  const totalPrice = winners.reduce((total, winner) => total + BigInt(winner.price ?? 0), 0n)
+  elements.sellerSettlementPrice.textContent = `${formatMicroCcd(totalPrice / BigInt(winners.length))} CCD / 单位`
   elements.sellerSettlementProceeds.textContent = `${formatMicroCcd(sellerReceives)} CCD`
   elements.sellerSettlementBalance.textContent = `${formatMicroCcd(testnet.view?.contractBalanceMicroCcd ?? 0)} CCD`
   elements.sellerSettlementExplorer.href = testnet.initialization.contractUrl ?? `https://ccdexplorer.io/testnet/contract/${testnet.initialization.address.index}/${testnet.initialization.address.subindex}`
@@ -709,7 +722,7 @@ function renderTestnet() {
   // rejected by the chain with its actual reason.
   elements.initContractButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || testnet.busy || !canCreateReplacement || testnet.pending !== null
   elements.readViewButton.disabled = !connected || !hasInitialization || testnet.busy || testnet.pending !== null
-  const decisionReady = testnet.sellerDecision !== null && testnet.sellerDecision.final.action !== 'needs_human'
+  const decisionReady = testnet.sellerDecision !== null && isValidSellerReserveInput()
   elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !serviceBound || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
   elements.cancelRoundButton.disabled = !connected || !isInstanceSeller || !canCancel || testnet.busy || testnet.pending !== null
   elements.backupReserveButton.disabled = testnet.startPlan === null
@@ -787,7 +800,7 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
   elements.roleLabel.textContent = roleLabel
   elements.roleStage.textContent = stageLabel
   const currentAccount = walletConnection?.accounts?.[0] ?? null
-  const isChainWinner = currentAccount !== null && currentAccount === chainWinner()
+  const isChainWinner = currentAccount !== null && chainWinners().includes(currentAccount)
 
   if (!hasInitialization) {
     elements.roleGuidance.textContent = '当前尚无容量窗口。你可以作为卖家准备合约模块、创建实例，并在获得底价建议后发布。'
@@ -963,6 +976,15 @@ function optionValue(value) {
   return null
 }
 
+function isValidSellerReserveInput() {
+  try {
+    parseCcdToMicroCcd(elements.sellerReserveInput.value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function phaseLabel(phase) {
   return {
     Idle: '等待发布',
@@ -992,7 +1014,8 @@ function formatStatusSummary(status) {
     : status.initialization
     ? `请切换到创建该容量窗口的卖家账户 ${shortAccountAddress(status.initialization.sender)}，再确认发布。`
     : '下一步：由已连接的卖家直接创建 0 CCD 容量窗口；只有当前 Wasm 从未部署到 Testnet 时才需要先部署模块。'
-  return `公共节点已确认 Concordium Testnet。\n当前 Wasm module ref: ${status.moduleReference}\n${instance}\n${action}`
+  const contextNote = status.instanceIssue ? `\n${status.instanceIssue}` : ''
+  return `公共节点已确认 Concordium Testnet。\n当前 Wasm module ref: ${status.moduleReference}\n${instance}\n${action}${contextNote}`
 }
 
 function publicRoundPlan(plan) {
@@ -1150,9 +1173,14 @@ function renderJudgeJourney() {
   const chain = judgeJourney.chainJourney
   const decision = judgeJourney.sellerDecisionEvidence
   const address = `<${chain.instance.index},${chain.instance.subindex}>`
-  elements.judgeJourneyBadge.textContent = `${judgeJourney.network} · ${address}`
-  elements.judgeJourneyBadge.className = 'badge badge-success'
-  elements.judgeJourneySummary.textContent = `${judgeJourney.service.name} · ${judgeJourney.service.capacityUnits} 个容量单位 · 规格指纹 ${shortHash(judgeJourney.service.serviceId)}。以下 ${chain.steps.length} 笔交易属于同一合约实例 ${address}；金额全部来自最终结算快照。`
+  const historicalProtocol = judgeJourney.protocolStatus
+  elements.judgeJourneyBadge.textContent = historicalProtocol
+    ? `${judgeJourney.network} · 历史证据`
+    : `${judgeJourney.network} · ${address}`
+  elements.judgeJourneyBadge.className = historicalProtocol ? 'badge-warning' : 'badge-success'
+  elements.judgeJourneySummary.textContent = historicalProtocol
+    ? `${judgeJourney.protocolStatus} 本快照：${judgeJourney.service.name} · ${judgeJourney.service.capacityUnits} 个容量单位 · 实例 ${address}。`
+    : `${judgeJourney.service.name} · ${judgeJourney.service.capacityUnits} 个容量单位 · 规格指纹 ${shortHash(judgeJourney.service.serviceId)}。以下 ${chain.steps.length} 笔交易属于同一合约实例 ${address}；金额全部来自最终结算快照。`
 
   renderJudgeDecision(decision)
   for (const [index, step] of chain.steps.entries()) {
@@ -1335,7 +1363,7 @@ function renderMarketHistory() {
     return
   }
 
-  elements.marketHistorySummary.textContent = `已确认 ${records.length} 笔成交；其中 ${currentSpecRecords.length} 笔与当前容量规格指纹一致，可作为该规格的价格信号。其余记录保留为独立历史证据，不混入当前规格。`
+  elements.marketHistorySummary.textContent = `已确认 ${records.length} 笔成交；其中 ${currentSpecRecords.length} 笔与当前容量市场标识一致，可作为当前市场的价格信号。其余记录保留为独立历史证据，不混入当前市场。`
   for (const record of records) elements.marketHistoryList.append(renderMarketHistoryEntry(record))
 }
 
@@ -1363,36 +1391,39 @@ function marketHistoryRecords() {
 }
 
 function currentSpecSettlementRecords(records = marketHistoryRecords()) {
-  return records.filter((record) => record.reconciled === true && record.service?.matchesCurrentSpec === true)
+  return records.filter((record) => record.reconciled === true && record.service?.matchesCurrentSpec === true && record.outcome !== 'no_sale')
 }
 
 function renderMarketSignal() {
   const records = currentSpecSettlementRecords().sort((left, right) => String(left.settledAt).localeCompare(String(right.settledAt)))
   const sampleCount = records.length
+  const allocatedUnits = records.reduce((total, record) => total + BigInt(historyAllocatedUnits(record)), 0n)
   elements.marketSignalMetrics.replaceChildren()
   elements.marketSignalBadge.textContent = sampleCount >= 3 ? `已确认样本 n = ${sampleCount}` : `样本 n = ${sampleCount}`
   elements.marketSignalBadge.className = `badge ${sampleCount >= 3 ? 'badge-success' : 'badge-warning'}`
 
   if (sampleCount === 0) {
-    elements.marketSignalReading.textContent = '当前规格尚无已确认且资金核对通过的成交，暂不形成价格信号。'
-    renderMarketSignalEmpty('等待同规格的已确认成交。')
+    elements.marketSignalReading.textContent = '当前容量市场尚无已确认且资金核对通过的成交，暂不形成价格信号。'
+    renderMarketSignalEmpty('等待当前容量市场的已确认成交。')
     return
   }
 
-  const prices = records.map((record) => BigInt(record.clearingPriceMicroCcd)).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
+  const prices = records.map((record) => BigInt(historyAveragePrice(record))).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
   const middle = Math.floor(prices.length / 2)
   const median = prices.length % 2 === 1 ? prices[middle] : (prices[middle - 1] + prices[middle]) / 2n
   const latest = records.at(-1)
   const lowest = prices[0]
   const highest = prices.at(-1)
-  const averageSurplus = records.reduce((total, record) => total + BigInt(record.surplusMicroCcd), 0n) / BigInt(sampleCount)
+  const weightedAveragePrice = records.reduce((total, record) => total + BigInt(historyAveragePrice(record)) * BigInt(historyAllocatedUnits(record)), 0n) / allocatedUnits
+  const averageSurplus = records.reduce((total, record) => total + BigInt(historyTotalSurplus(record)), 0n) / allocatedUnits
   const metrics = [
-    ['已确认样本', `n = ${sampleCount}`],
-    ['最新成交价', `${formatMicroCcd(latest.clearingPriceMicroCcd)} CCD`],
-    ['中位成交价', `${formatMicroCcd(median)} CCD`],
-    ['成交价区间', `${formatMicroCcd(lowest)}–${formatMicroCcd(highest)} CCD`],
-    ['平均交易剩余', `${formatMicroCcd(averageSurplus)} CCD`],
-    ['最新 / 中位数', relativeToMedian(latest.clearingPriceMicroCcd, median)],
+    ['已确认窗口', `n = ${sampleCount}`],
+    ['已售容量', `${allocatedUnits} 单位`],
+    ['最新成交均价', `${formatMicroCcd(historyAveragePrice(latest))} CCD / 单位`],
+    ['加权成交均价', `${formatMicroCcd(weightedAveragePrice)} CCD / 单位`],
+    ['成交均价区间', `${formatMicroCcd(lowest)}–${formatMicroCcd(highest)} CCD / 单位`],
+    ['每单位平均剩余', `${formatMicroCcd(averageSurplus)} CCD`],
+    ['最新 / 中位数', relativeToMedian(historyAveragePrice(latest), median)],
   ]
   for (const [label, value] of metrics) {
     const metric = document.createElement('div')
@@ -1405,7 +1436,7 @@ function renderMarketSignal() {
   }
   elements.marketSignalReading.textContent = sampleCount < 3
     ? `仅有 ${sampleCount} 笔样本，暂不形成稳定判断；以下图表只展示已确认事实。`
-    : `早期观察：最新成交价为 ${formatMicroCcd(latest.clearingPriceMicroCcd)} CCD，${relativeToMedian(latest.clearingPriceMicroCcd, median, 'text')}；样本仅 ${sampleCount} 笔，继续观察，不代表稳定趋势或公允价格。`
+    : `早期观察：最新成交均价为 ${formatMicroCcd(historyAveragePrice(latest))} CCD / 单位，${relativeToMedian(historyAveragePrice(latest), median, 'text')}；样本仅 ${sampleCount} 窗口，继续观察，不代表稳定趋势或公允价格。`
   renderMarketSignalChart(records)
 }
 
@@ -1434,7 +1465,7 @@ function renderMarketSignalEmpty(message) {
 
 function renderMarketSignalChart(records) {
   if (records.length === 0) {
-    renderMarketSignalEmpty('等待同规格的已确认成交。')
+    renderMarketSignalEmpty('等待当前容量市场的已确认成交。')
     return
   }
   const ns = 'http://www.w3.org/2000/svg'
@@ -1518,7 +1549,7 @@ function renderMarketSignalChart(records) {
 }
 
 function currentSettlementRecord() {
-  if (!testnet.initialization || phaseName(testnet.view?.state?.phase) !== 'Settled') return null
+  if (!testnet.initialization || !['Settled', 'NoSale'].includes(phaseName(testnet.view?.state?.phase))) return null
   const transaction = testnet.transactions.find((entry) => (
     entry.label === '链上结算' && sameInstance(entry.instance, testnet.initialization.address)
   ))
@@ -1538,6 +1569,36 @@ function currentSettlementRecord() {
     console.error('Could not create current settlement record:', error)
     return null
   }
+}
+
+function historyAllocatedUnits(record) {
+  const value = Number(record?.allocatedUnits ?? record?.winners?.length ?? 1)
+  return Number.isInteger(value) && value >= 0 ? value : 1
+}
+
+function historyAveragePrice(record) {
+  return String(record?.averageClearingPriceMicroCcd ?? record?.clearingPriceMicroCcd ?? '0')
+}
+
+function historyAverageBid(record) {
+  return String(record?.averageWinningBidMicroCcd ?? record?.winningBidMicroCcd ?? '0')
+}
+
+function historyTotalSurplus(record) {
+  return String(record?.totalSurplusMicroCcd ?? record?.surplusMicroCcd ?? '0')
+}
+
+function historyWinners(record) {
+  if (Array.isArray(record?.winners)) return record.winners
+  if (record?.winner) {
+    return [{
+      bidder: record.winner,
+      bidMicroCcd: record.winningBidMicroCcd,
+      clearingPriceMicroCcd: record.clearingPriceMicroCcd,
+      buyerRefundMicroCcd: record.buyerRefundMicroCcd,
+    }]
+  }
+  return []
 }
 
 function legacySettlementRecord(evidence) {
@@ -1568,7 +1629,7 @@ function legacySettlementRecord(evidence) {
     sellerReceivesMicroCcd: round.finalView.sellerTotalMicroCcd,
     totalDepositedMicroCcd: round.finalView.totalDepositedMicroCcd,
     reconciled: totalDeposited === buyerRefund + platformFee + sellerReceives,
-    protocol: '历史顺序揭示协议；不计入当前规格的价格信号。',
+    protocol: '历史顺序揭示协议；不计入当前双赢家容量市场的价格信号。',
   }
 }
 
@@ -1586,10 +1647,12 @@ function renderMarketHistoryEntry(record) {
   capacityValue.textContent = capacityName
   capacity.append(capacityLabel, capacityValue)
   summary.append(capacity)
+  const allocated = historyAllocatedUnits(record)
+  const noSale = record.outcome === 'no_sale'
   for (const [label, value] of [
     ['结算时间', record.settledAt ? formatDate(record.settledAt) : '已确认'],
-    ['成交价', `${formatMicroCcd(record.clearingPriceMicroCcd)} CCD`],
-    ['交易剩余', `${formatMicroCcd(record.surplusMicroCcd)} CCD`],
+    ['已售 / 成交均价', noSale ? '0 单位 · 未成交' : `${allocated} 单位 · ${formatMicroCcd(historyAveragePrice(record))} CCD`],
+    ['交易剩余', noSale ? '—' : `${formatMicroCcd(historyTotalSurplus(record))} CCD`],
     ['平台费', `${formatMicroCcd(record.platformFeeMicroCcd)} CCD`],
   ]) {
     const item = document.createElement('span')
@@ -1602,18 +1665,24 @@ function renderMarketHistoryEntry(record) {
   }
   const result = document.createElement('strong')
   result.className = 'history-result'
-  result.textContent = record.reconciled ? '资金核对通过' : '资金核对失败'
+  result.textContent = record.reconciled ? (noSale ? '未成交 · 资金核对通过' : '资金核对通过') : '资金核对失败'
   summary.append(result)
 
   const detail = document.createElement('div')
   detail.className = 'history-detail'
   const fields = document.createElement('dl')
+  const winners = historyWinners(record)
+  const winnerSummary = winners.length > 0
+    ? winners.map((winner) => `${shortAccountAddress(String(winner.bidder))} · ${formatMicroCcd(winner.clearingPriceMicroCcd)} CCD`).join('；')
+    : noSale ? '无赢家' : '已脱敏'
   for (const [label, value] of [
     ['容量窗口', `<${record.instance.index},${record.instance.subindex}>`],
     ['卖家底价', `${formatMicroCcd(record.reserveMicroCcd)} CCD`],
-    ['中标报价', `${formatMicroCcd(record.winningBidMicroCcd)} CCD`],
-    ['赢家', record.winner ? shortAccountAddress(record.winner) : '已脱敏'],
-    ['赢家退款', `${formatMicroCcd(record.buyerRefundMicroCcd)} CCD`],
+    ['赢家数 / 已售容量', `${winners.length || allocated} / ${allocated} 单位`],
+    ['赢家成交均价', `${formatMicroCcd(historyAveragePrice(record))} CCD / 单位`],
+    ['赢家明细（地址 · 成交价）', winnerSummary],
+    ['赢家报价均价', `${formatMicroCcd(historyAverageBid(record))} CCD / 单位`],
+    ['赢家退款合计', `${formatMicroCcd(record.buyerRefundMicroCcd)} CCD`],
     ['买家退款合计', `${formatMicroCcd(record.totalRefundMicroCcd)} CCD`],
     ['卖家所得', `${formatMicroCcd(record.sellerReceivesMicroCcd)} CCD`],
     ['链上总托管', `${formatMicroCcd(record.totalDepositedMicroCcd)} CCD`],
@@ -1629,7 +1698,9 @@ function renderMarketHistoryEntry(record) {
   const links = document.createElement('div')
   links.className = 'history-links'
   const qualification = document.createElement('p')
-  qualification.textContent = record.service?.matchesCurrentSpec
+  qualification.textContent = noSale && record.service?.matchesCurrentSpec
+    ? '该轮未成交：计入供给与未成交信号，不计入成交价格统计。'
+    : record.service?.matchesCurrentSpec
     ? '规格指纹与当前 service-spec.json 一致：该记录可用于当前容量规格的价格信号。'
     : record.protocol ?? '规格指纹与当前 service-spec.json 不一致：保留为独立历史证据，不混入当前价格信号。'
   const fingerprint = document.createElement('code')
@@ -1710,19 +1781,23 @@ function renderSettlementBreakdown(view) {
   const refunds = allocations.reduce((total, item) => total + toMicro(item.buyer_refund), 0n)
   const platform = allocations.reduce((total, item) => total + toMicro(item.platform_receives), 0n)
   const seller = totalDeposited - refunds - platform
-  const winner = allocations.find((item) => item.won === true)
+  const winners = allocations.filter((item) => item.won === true)
   const rows = [
     ['链上总托管', `${formatMicroCcd(totalDeposited)} CCD`],
     ['买家退款合计', `${formatMicroCcd(refunds)} CCD`],
     ['平台所得', `${formatMicroCcd(platform)} CCD`],
     ['卖家所得（总托管减退款与平台费）', `${formatMicroCcd(seller)} CCD`],
   ]
-  if (winner) {
+  if (winners.length > 0) {
+    const totalPrice = winners.reduce((total, winner) => total + toMicro(winner.price), 0n)
+    const winnerRows = winners.map((winner, index) => [
+      `赢家 ${index + 1}`,
+      `${shortAccountAddress(String(winner.bidder))} · ${formatMicroCcd(toMicro(winner.price))} CCD`,
+    ])
     rows.splice(1, 0,
-      ['赢家', shortAccountAddress(String(winner.bidder))],
-      ['成交价', `${formatMicroCcd(toMicro(winner.price))} CCD`],
-      ['赢家平台费', `${formatMicroCcd(toMicro(winner.buyer_fee))} CCD`],
-      ['赢家退款', `${formatMicroCcd(toMicro(winner.buyer_refund))} CCD`],
+      ['已售容量', `${winners.length} 单位`],
+      ['赢家成交均价', `${formatMicroCcd(totalPrice / BigInt(winners.length))} CCD / 单位`],
+      ...winnerRows,
     )
   } else {
     rows.splice(1, 0, ['成交结果', phase === 'NoSale' ? '无合格报价' : '已取消'])

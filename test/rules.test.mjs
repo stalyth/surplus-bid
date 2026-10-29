@@ -19,29 +19,35 @@ function readyAuction() {
   let auction = createDemoAuction(Date.UTC(2026, 9, 24, 10, 0, 0))
   auction = commitDemoBid(auction, DEMO_AGENTS[0])
   auction = commitDemoBid(auction, DEMO_AGENTS[1])
+  auction = commitDemoBid(auction, DEMO_AGENTS[2])
   auction = closeCommitAndReveal(auction)
   auction = revealDemoBid(auction, DEMO_AGENTS[0])
   auction = revealDemoBid(auction, DEMO_AGENTS[1])
+  auction = revealDemoBid(auction, DEMO_AGENTS[2])
   return closeBuyerReveal(auction)
 }
 
-test('commit-reveal demo settles two buyers and conserves seller and buyer deposits', () => {
+test('commit-reveal capacity allocation settles two of three buyers and conserves every microCCD', () => {
   const before = readyAuction()
-  assert.equal(contractBalanceMicro(before), 12n * MICRO_CCD)
+  assert.equal(contractBalanceMicro(before), 17n * MICRO_CCD)
   const auction = finalizeDemoAuction(before)
   const firstAccount = auction.settlement.allocations.find((item) => item.agentId === 'account-36pddm-jkfkyp')
   const secondAccount = auction.settlement.allocations.find((item) => item.agentId === 'account-4jtmeo-5epu')
+  const thirdAccount = auction.settlement.allocations.find((item) => item.agentId === 'account-4awg-nddj')
   assert.equal(auction.phase, 'Finalized')
+  assert.equal(firstAccount.won, false)
   assert.equal(firstAccount.refundMicro, 4n * MICRO_CCD)
   assert.equal(secondAccount.priceMicro, 4n * MICRO_CCD)
   assert.equal(secondAccount.refundMicro, 1_800_000n)
-  assert.equal(auction.settlement.sellerReceivesMicro, 3_800_000n)
-  assert.equal(auction.settlement.platformReceivesMicro, 400_000n)
+  assert.equal(thirdAccount.priceMicro, 3_500_000n)
+  assert.equal(thirdAccount.refundMicro, 1_350_000n)
+  assert.equal(auction.settlement.sellerReceivesMicro, 7_150_000n)
+  assert.equal(auction.settlement.platformReceivesMicro, 700_000n)
   assert.equal(contractBalanceMicro(auction), 0n)
-  const distributed = firstAccount.refundMicro + secondAccount.refundMicro +
+  const distributed = firstAccount.refundMicro + secondAccount.refundMicro + thirdAccount.refundMicro +
     auction.settlement.sellerReceivesMicro + auction.settlement.platformReceivesMicro +
     auction.settlement.sellerGuaranteeRefundMicro
-  assert.equal(distributed, 12n * MICRO_CCD)
+  assert.equal(distributed, 17n * MICRO_CCD)
 })
 
 test('amounts stay hidden until reveal and duplicate commitments are rejected', () => {
@@ -51,6 +57,14 @@ test('amounts stay hidden until reveal and duplicate commitments are rejected', 
   assert.equal(auction.bids[0].revealedBidMicro, null)
   assert.throws(() => commitDemoBid(auction, DEMO_AGENTS[0]), (error) =>
     error instanceof DemoRuleError && error.code === 'DUPLICATE_BID')
+})
+
+test('a fourth commitment is rejected by the bounded three-order rule', () => {
+  let auction = createDemoAuction()
+  for (const agent of DEMO_AGENTS) auction = commitDemoBid(auction, agent)
+  assert.throws(() => commitDemoBid(auction, {
+    id: 'account-fourth', name: '账户 fourth', bidMicro: 7n * MICRO_CCD, commitment: 'sha256:fourth',
+  }), (error) => error instanceof DemoRuleError && error.code === 'BID_LIMIT')
 })
 
 test('finalize before buyer reveal closes is rejected without changing state', () => {

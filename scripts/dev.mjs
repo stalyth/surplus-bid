@@ -19,6 +19,7 @@ import {
 } from '@concordium/web-sdk'
 import { ConcordiumGRPCNodeClient, credentials } from '@concordium/web-sdk/nodejs'
 import { decideNextReserve } from '../src/decision.mjs'
+import { buildTestnetDecisionHistory } from '../src/decision-history.mjs'
 import { createConfirmedSettlement, isConfirmedSettlement } from '../src/market-history.mjs'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -28,7 +29,9 @@ const port = parsePort(process.env.PORT)
 const testnetGenesis = '4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796'
 const contractName = ContractName.fromString('surplus_bid')
 const platformAddress = '4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4'
-const protocolVersion = 'shared-reveal-v2'
+const protocolVersion = 'batch-allocation-v3'
+const capacityUnits = 2
+const maxBids = 3
 const sessionHistoryPath = resolve(repoRoot, 'runtime', 'session-activity.json')
 const serviceSpecPath = resolve(repoRoot, 'public', 'service-spec.json')
 const testnetClient = new ConcordiumGRPCNodeClient(
@@ -76,8 +79,13 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'POST' && url.pathname === '/api/agent/decide') {
       const body = await readJson(request)
-      const decision = await decideNextReserve(body.taskId, body.input)
-      sendJson(response, 200, { ok: true, decision })
+      const service = loadServiceSpec()
+      const history = buildTestnetDecisionHistory(readSessionHistory().settlements, {
+        marketName: service.spec.serviceName,
+        nextSupplyUnits: capacityUnits,
+      })
+      const decision = await decideNextReserve(body.taskId, history.input)
+      sendJson(response, 200, { ok: true, decision, history: history.provenance })
       return
     }
     if (url.pathname.startsWith('/api/session/')) {
@@ -289,7 +297,7 @@ function persistVerifiedEvidence(label, hash) {
 }
 
 function persistConfirmedSettlement(view, transaction) {
-  if (!verified.initialization || variantName(view?.state?.phase) !== 'Settled') return
+  if (!verified.initialization || !['Settled', 'NoSale'].includes(variantName(view?.state?.phase))) return
   try {
     const spec = loadServiceSpec()
     const record = createConfirmedSettlement({
@@ -310,7 +318,7 @@ function persistConfirmedSettlement(view, transaction) {
 }
 
 function persistSettlementFromCurrentState(view) {
-  if (!verified.initialization || variantName(view?.state?.phase) !== 'Settled') return
+  if (!verified.initialization || !['Settled', 'NoSale'].includes(variantName(view?.state?.phase))) return
   const history = readSessionHistory()
   const finalization = history.evidence.find((entry) => (
     entry.label === '链上结算' && sameContractAddress(entry.instance, verified.initialization.address)
@@ -327,7 +335,24 @@ async function handleTestnetApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/testnet/status') {
     const artifactStatus = inspectArtifacts()
     const consensus = await getTestnetConsensus()
-    const view = artifactStatus.ready && verified.initialization ? await readInitializedState() : null
+    let view = null
+    let instanceIssue = null
+    if (artifactStatus.ready && verified.initialization) {
+      try {
+        view = await readInitializedState()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        // A local session can still point to an instance made by an older Wasm
+        // after the protocol changes. It remains historical evidence, but it
+        // must not make the whole status endpoint fail and lock every action.
+        if (message === '读取到的实例不属于当前 surplus_bid 模块。') {
+          clearStaleLiveContext()
+          instanceIssue = '已隔离旧版实例：它不属于当前双赢家 surplus_bid 模块。历史证据仍会保留；请部署当前 Wasm 或创建新的 0 CCD 容量窗口。'
+        } else {
+          instanceIssue = `当前实例暂时无法读取：${message}`
+        }
+      }
+    }
     if (view) {
       restoreObservedRound(view)
       persistVerifiedContext()
@@ -342,6 +367,7 @@ async function handleTestnetApi(request, response, url) {
       protocolVersion,
       contractName: 'surplus_bid',
       serviceSpec: inspectServiceSpec(),
+      instanceIssue,
       platformAddress,
       lastFinalizedBlock: String(consensus.lastFinalizedBlock),
       deployment: verified.deployment,
@@ -380,6 +406,15 @@ async function handleTestnetApi(request, response, url) {
     return
   }
   sendJson(response, 404, { ok: false, error: 'Testnet endpoint not found.' })
+}
+
+function clearStaleLiveContext() {
+  verified.deployment = null
+  verified.initialization = null
+  verified.round = null
+  const history = readSessionHistory()
+  history.current = null
+  writeSessionHistory(history)
 }
 
 async function verifyDeployment({ hash, sender }) {
@@ -460,15 +495,16 @@ async function verifyWinner({ account }) {
       serviceId: loadServiceSpec().hash,
     }
   }
-  const winner = (Array.isArray(view.state.allocations) ? view.state.allocations : []).find((item) => item.won === true)
-  if (!winner?.bidder) throw new Error('链上结算状态缺少赢家分配，无法核验。')
-  const winnerAccount = AccountAddress.toBase58(parseAccount(String(winner.bidder)))
+  const winnerAccounts = (Array.isArray(view.state.allocations) ? view.state.allocations : [])
+    .filter((item) => item.won === true && item.bidder)
+    .map((item) => AccountAddress.toBase58(parseAccount(String(item.bidder))))
+  if (winnerAccounts.length === 0) throw new Error('链上结算状态缺少赢家分配，无法核验。')
   return {
-    eligible: requested === winnerAccount,
-    reason: requested === winnerAccount ? '当前账户与链上赢家一致。' : '当前账户不是该轮链上赢家。',
+    eligible: winnerAccounts.includes(requested),
+    reason: winnerAccounts.includes(requested) ? '当前账户属于链上赢家。' : '当前账户不是本轮链上赢家。',
     phase,
     account: requested,
-    winner: winnerAccount,
+    winners: winnerAccounts,
     serviceId: loadServiceSpec().hash,
   }
 }
@@ -508,7 +544,6 @@ async function verifyStartRound({ hash, sender, plan }) {
   if (
     normalizeTimestamp(actualRound.commit_end) !== expected.commitEnd ||
     normalizeTimestamp(actualRound.reveal_end) !== expected.revealEnd ||
-    Number(actualRound.max_bids) !== expected.maxBids ||
     !equalNumberArrays(actualRound.reserve_commitment, expected.reserveCommitment)
   ) {
     throw new Error('链上记录的本轮参数与钱包提交参数不一致。')
@@ -518,7 +553,8 @@ async function verifyStartRound({ hash, sender, plan }) {
     roundId: '1',
     commitEnd: expected.commitEnd,
     revealEnd: expected.revealEnd,
-    maxBids: expected.maxBids,
+    capacityUnits,
+    maxBids,
     reserveCommitment: expected.reserveCommitment,
     blockHash: String(outcome.blockHash),
     explorerUrl: `https://ccdexplorer.io/testnet/transaction/${hash}`,
@@ -659,7 +695,12 @@ function verifyUpdateState(receiveName, view, sender, expected) {
     }
     const allocations = Array.isArray(state.allocations) ? state.allocations : []
     const winnerCount = allocations.filter((item) => item.won === true).length
-    if (allocations.length !== bids.length || (phase === 'Settled' && winnerCount !== 1) || (phase === 'NoSale' && winnerCount !== 0)) {
+    if (
+      bids.length > maxBids ||
+      allocations.length !== bids.length ||
+      (phase === 'Settled' && (winnerCount < 1 || winnerCount > capacityUnits)) ||
+      (phase === 'NoSale' && winnerCount !== 0)
+    ) {
       throw new Error('finalize 后链上赢家分配与同一 round 的报价记录不一致。')
     }
     return
@@ -718,10 +759,10 @@ function loadArtifacts() {
   try {
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   } catch {
-    throw new Error('当前 Wasm/schema 没有 shared-reveal-v2 构建清单。请先运行 ./scripts/check-contract.sh 生成并验证新合约，旧顺序揭示 artifact 不可用于开始新轮次。')
+    throw new Error('当前 Wasm/schema 没有 batch-allocation-v3 构建清单。请先运行 ./scripts/check-contract.sh 生成并验证双赢家容量分配合约。')
   }
   if (manifest.protocolVersion !== protocolVersion || manifest.moduleReference !== moduleReference) {
-    throw new Error('当前 Wasm/schema 与 shared-reveal-v2 构建清单不一致。请重新运行 ./scripts/check-contract.sh；不要用旧 schema 发起 start_round。')
+    throw new Error('当前 Wasm/schema 与 batch-allocation-v3 构建清单不一致。请重新运行 ./scripts/check-contract.sh；不要用旧单赢家 schema 发起 start_round。')
   }
   return { moduleReference, schema }
 }
@@ -829,18 +870,16 @@ function validatePublicRoundPlan(plan, initialization) {
   const reserveCommitment = parameters.reserve_commitment
   const commitEnd = normalizeTimestamp(parameters.commit_end)
   const revealEnd = normalizeTimestamp(parameters.reveal_end)
-  const maxBids = Number(parameters.max_bids)
   if (!commitEnd || !revealEnd) {
     throw new Error('本轮截止时间格式无效。')
   }
   if (!(BigInt(commitEnd) < BigInt(revealEnd))) {
     throw new Error('本轮截止时间顺序无效。')
   }
-  if (maxBids < 1 || maxBids > 16 || !Number.isInteger(maxBids)) throw new Error('本轮最大报价数量无效。')
   if (!Array.isArray(reserveCommitment) || reserveCommitment.length !== 32 || reserveCommitment.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
     throw new Error('底价承诺必须是 32 字节。')
   }
-  return { commitEnd, revealEnd, maxBids, reserveCommitment }
+  return { commitEnd, revealEnd, reserveCommitment }
 }
 
 function restoreObservedRound(view) {
@@ -856,7 +895,8 @@ function restoreObservedRound(view) {
     phase: variantName(view.state.phase),
     commitEnd: normalizeTimestamp(actual.commit_end),
     revealEnd: normalizeTimestamp(actual.reveal_end),
-    maxBids: Number(actual.max_bids),
+    capacityUnits,
+    maxBids,
     reserveCommitment: Array.from(actual.reserve_commitment, Number),
     explorerUrl: verified.round?.explorerUrl ?? verified.initialization.contractUrl,
   }
