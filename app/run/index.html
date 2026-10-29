@@ -10,7 +10,7 @@
     <title>SurplusBid · Capacity window</title>
     <link rel="stylesheet" href="/app/styles.css" />
   </head>
-  <body>
+  <body class="run-page" data-runtime-mode="loading">
     <header class="site-header">
       <a class="brand" href="/" aria-label="返回 SurplusBid 首页">
         <span class="brand-mark">S</span>
@@ -41,7 +41,22 @@
         </div>
       </section>
 
-      <section class="flow-shell" aria-labelledby="flow-title">
+      <section class="judge-journey public-only" id="judge-journey" aria-labelledby="judge-journey-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Verified transaction journey</p>
+            <h2 id="judge-journey-title">一条成交，从策略证据到链上结果</h2>
+          </div>
+          <span class="badge badge-neutral" id="judge-journey-badge">正在读取证据</span>
+        </div>
+        <p class="judge-journey-intro" id="judge-journey-summary">公开页正在读取随仓库提交的 Testnet 证据快照；无需连接钱包。</p>
+        <article class="decision-evidence" id="judge-decision-evidence" aria-label="Seller Agent 决策证据"></article>
+        <ol class="journey-steps" id="judge-journey-steps" aria-label="链上交易步骤"></ol>
+        <article class="journey-result" id="judge-journey-result" aria-label="链上结算结果"></article>
+        <p class="journey-limit">公开观察页只展示已提交的脱敏证据；Seller Agent 评测与这笔 Testnet 结算是两组独立证据，不声称模型直接签名或提交了该实例。</p>
+      </section>
+
+      <section class="flow-shell local-live-only" aria-labelledby="flow-title">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Capacity market</p>
@@ -91,14 +106,6 @@
               <div><span>当前承诺截止</span><strong id="auction-deadline">发布后显示</strong></div>
             </div>
 
-            <div class="seller-agent-card" id="seller-agent-card">
-              <div class="panel-kicker"><span>AI</span> Seller Agent 建议</div>
-              <p>Seller Agent 根据已确认的历史提出下一清算窗口的底价。代码会核验涨幅、供给变化与交易剩余约束；卖家始终在钱包中确认发布。</p>
-              <button class="button button-secondary" id="seller-decision-button" type="button">获取底价建议</button>
-              <div class="testnet-status" id="seller-decision-status" aria-live="polite">尚未调用模型。模型失败或证据不足时保持 2 CCD，且不会开放链上开始按钮。</div>
-            </div>
-
-            <p class="todo">Seller Agent 历史输入标记为 demo data。真实链上操作必须在右侧交易工作台中由钱包确认。</p>
           </article>
 
           <article class="panel testnet-panel">
@@ -111,6 +118,14 @@
                 <div><span>链上阶段</span><strong id="role-stage">等待连接钱包</strong></div>
                 <p id="role-guidance">连接钱包后，页面会依据合约状态显示你现在可执行的操作。</p>
               </section>
+              <section class="seller-agent-card" id="seller-agent-card" aria-labelledby="seller-agent-title">
+                <div class="panel-kicker"><span>AI</span> Seller Agent 建议</div>
+                <h5 id="seller-agent-title">决定下一容量窗口的底价</h5>
+                <p>Seller Agent 根据已确认的历史提出底价建议。代码会核验涨幅、供给变化与交易剩余约束；卖家始终在钱包中确认发布。</p>
+                <button class="button button-secondary" id="seller-decision-button" type="button">获取底价建议</button>
+                <div class="testnet-status" id="seller-decision-status" aria-live="polite">尚未调用模型。模型失败或证据不足时保持 2 CCD，且不会开放链上开始按钮。</div>
+              </section>
+              <p class="seller-agent-locked" id="seller-agent-locked" hidden>本窗口底价已承诺上链，Seller Agent 不能再修改。</p>
               <section class="round-progress" id="round-progress" aria-labelledby="round-progress-title">
                 <div class="round-progress-heading">
                   <span id="round-progress-title">当前清算进度</span>
@@ -130,6 +145,18 @@
                     <span>4</span><div><strong>链上结算</strong><small id="progress-settlement-detail">揭示期结束后开放</small></div>
                   </li>
                 </ol>
+              </section>
+              <section class="seller-settlement-summary" id="seller-settlement-summary" hidden aria-live="polite">
+                <div>
+                  <h4>本窗口结算结果</h4>
+                  <a id="seller-settlement-explorer" target="_blank" rel="noreferrer">查看链上结果 ↗</a>
+                </div>
+                <dl>
+                  <div><dt>成交价</dt><dd id="seller-settlement-price">—</dd></div>
+                  <div><dt>卖家链上收款</dt><dd id="seller-settlement-proceeds">—</dd></div>
+                  <div><dt>合约余额</dt><dd id="seller-settlement-balance">—</dd></div>
+                </dl>
+                <p>收款包含卖家保证金返还；可准备下一容量窗口，当前窗口证据会保留。</p>
               </section>
               <div class="action-row" id="seller-publish-actions">
                 <button class="button button-ghost" id="deploy-module-button" type="button" disabled>首次部署合约模块</button>
@@ -169,7 +196,7 @@
         </div>
       </section>
 
-      <section class="evidence-section" aria-labelledby="evidence-title">
+      <section class="evidence-section local-live-only" aria-labelledby="evidence-title">
         <article class="panel evidence-panel">
           <div class="panel-kicker"><span>04</span> 结算与公开证据</div>
           <div class="panel-title-row">

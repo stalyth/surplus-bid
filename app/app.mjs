@@ -32,6 +32,7 @@ let activity = []
 let walletConnection = null
 let observedWalletProvider = null
 let historicalEvidence = null
+let judgeJourney = null
 let confirmedSettlements = []
 let publishedSettlements = []
 let serviceSpec = null
@@ -68,6 +69,7 @@ const elements = {
   sellerDecisionButton: byId('seller-decision-button'),
   sellerDecisionStatus: byId('seller-decision-status'),
   sellerAgentCard: byId('seller-agent-card'),
+  sellerAgentLocked: byId('seller-agent-locked'),
   deployModuleButton: byId('deploy-module-button'),
   initContractButton: byId('init-contract-button'),
   readViewButton: byId('read-view-button'),
@@ -89,6 +91,11 @@ const elements = {
   progressCommitDetail: byId('progress-commit-detail'),
   progressRevealDetail: byId('progress-reveal-detail'),
   progressSettlementDetail: byId('progress-settlement-detail'),
+  sellerSettlementSummary: byId('seller-settlement-summary'),
+  sellerSettlementExplorer: byId('seller-settlement-explorer'),
+  sellerSettlementPrice: byId('seller-settlement-price'),
+  sellerSettlementProceeds: byId('seller-settlement-proceeds'),
+  sellerSettlementBalance: byId('seller-settlement-balance'),
   sellerPublishActions: byId('seller-publish-actions'),
   buyerCommitShell: byId('buyer-commit-shell'),
   sellerRevealShell: byId('seller-reveal-shell'),
@@ -111,6 +118,11 @@ const elements = {
   verifyWinnerButton: byId('verify-winner-button'),
   winnerVerificationStatus: byId('winner-verification-status'),
   runtimeModeBadge: byId('runtime-mode-badge'),
+  judgeJourneyBadge: byId('judge-journey-badge'),
+  judgeJourneySummary: byId('judge-journey-summary'),
+  judgeDecisionEvidence: byId('judge-decision-evidence'),
+  judgeJourneySteps: byId('judge-journey-steps'),
+  judgeJourneyResult: byId('judge-journey-result'),
 }
 
 elements.sellerDecisionButton.addEventListener('click', async () => {
@@ -462,7 +474,8 @@ function render() {
   const livePhase = phaseName(testnet.view?.state?.phase)
   const liveWindow = testnet.initialization?.address
 
-  elements.sellerDecisionButton.disabled = !runtime.agentApi || testnet.agentBusy || testnet.round !== null
+  const activeRound = testnet.round !== null && !['NoSale', 'Settled', 'Cancelled'].includes(livePhase)
+  elements.sellerDecisionButton.disabled = !runtime.agentApi || testnet.agentBusy || activeRound
   elements.sellerDecisionButton.textContent = !runtime.agentApi
     ? '真实评测结果已记录'
     : testnet.agentBusy ? 'Seller Agent 正在分析…' : testnet.sellerDecision ? '重新获取底价建议' : '获取底价建议'
@@ -502,6 +515,7 @@ function render() {
   renderMarketSignal()
   renderEvidencePanel()
   renderWinnerVerification()
+  renderJudgeJourney()
 }
 
 function renderServiceSpec() {
@@ -543,24 +557,45 @@ function serviceBindingMatches() {
 
 function renderWinnerVerification() {
   const phase = phaseName(testnet.view?.state?.phase)
-  const visible = runtime.walletActions && testnet.initialization && ['Settled', 'NoSale'].includes(phase)
+  const winner = chainWinner()
+  const currentAccount = walletConnection?.accounts?.[0] ?? null
+  const visible = runtime.walletActions && testnet.initialization && phase === 'Settled' && currentAccount === winner
   elements.winnerVerification.hidden = !visible
   if (!visible) return
   const bound = serviceBindingMatches()
-  const connected = walletConnection !== null
-  elements.verifyWinnerButton.disabled = !connected || !bound || testnet.busy
+  elements.verifyWinnerButton.disabled = !bound || testnet.busy
   if (!bound) {
     elements.winnerVerificationStatus.textContent = '当前实例的 service_id 与本地规格摘要不一致，拒绝进行赢家核验。'
     elements.winnerVerificationStatus.dataset.tone = 'error'
-  } else if (!connected) {
-    elements.winnerVerificationStatus.textContent = '连接钱包后可只读核验当前账户是否是链上赢家。'
-    elements.winnerVerificationStatus.dataset.tone = 'neutral'
   } else if (!testnet.winnerVerification) {
-    elements.winnerVerificationStatus.textContent = phase === 'NoSale'
-      ? '当前容量窗口未成交；可核验不会存在赢家。'
-      : '此操作只读 Testnet，不发起钱包签名或 API 调用。'
+    elements.winnerVerificationStatus.textContent = '此操作只读 Testnet，不发起钱包签名或 API 调用。'
     elements.winnerVerificationStatus.dataset.tone = 'neutral'
   }
+}
+
+function chainWinner() {
+  const winner = (testnet.view?.state?.allocations ?? []).find((entry) => entry.won === true)?.bidder
+  return typeof winner === 'string' && winner.length > 0 ? winner : null
+}
+
+function renderSellerSettlementSummary() {
+  const phase = phaseName(testnet.view?.state?.phase)
+  const currentAccount = walletConnection?.accounts?.[0] ?? null
+  const isSeller = currentAccount !== null && currentAccount === testnet.initialization?.sender
+  const allocations = Array.isArray(testnet.view?.state?.allocations) ? testnet.view.state.allocations : []
+  const winner = allocations.find((entry) => entry.won === true)
+  const visible = runtime.walletActions && phase === 'Settled' && isSeller && winner
+  elements.sellerSettlementSummary.hidden = !visible
+  if (!visible) return
+
+  const totalDeposited = BigInt(testnet.view?.state?.total_deposited ?? 0)
+  const refunds = allocations.reduce((total, entry) => total + BigInt(entry.buyer_refund ?? 0), 0n)
+  const platform = allocations.reduce((total, entry) => total + BigInt(entry.platform_receives ?? 0), 0n)
+  const sellerReceives = totalDeposited - refunds - platform
+  elements.sellerSettlementPrice.textContent = `${formatMicroCcd(winner.price ?? 0)} CCD`
+  elements.sellerSettlementProceeds.textContent = `${formatMicroCcd(sellerReceives)} CCD`
+  elements.sellerSettlementBalance.textContent = `${formatMicroCcd(testnet.view?.contractBalanceMicroCcd ?? 0)} CCD`
+  elements.sellerSettlementExplorer.href = testnet.initialization.contractUrl ?? `https://ccdexplorer.io/testnet/contract/${testnet.initialization.address.index}/${testnet.initialization.address.subindex}`
 }
 
 function renderRoundProgress() {
@@ -622,6 +657,8 @@ function renderTestnet() {
     ]) button.disabled = true
     elements.bidAmountInput.disabled = true
     elements.sellerAgentCard.hidden = true
+    elements.sellerAgentLocked.hidden = true
+    elements.sellerSettlementSummary.hidden = true
     elements.sellerPublishActions.hidden = true
     elements.buyerCommitShell.hidden = true
     elements.sellerRevealShell.hidden = true
@@ -683,7 +720,10 @@ function renderTestnet() {
   elements.revealBidButton.disabled = !connected || !serviceBound || !revealOpen || !selectedBidPlan || selectedBidAlreadyRevealed || testnet.busy || testnet.pending !== null
   elements.finalizeChainButton.disabled = !connected || !serviceBound || !finalizeOpen || testnet.busy || testnet.pending !== null
 
-  elements.sellerAgentCard.hidden = !connected || (hasInitialization && role !== 'seller')
+  const activeSellerRound = hasRound && !terminal
+  const canShowSellerDecision = connected && (!hasInitialization || (isInstanceSeller && !activeSellerRound))
+  elements.sellerAgentCard.hidden = !canShowSellerDecision
+  elements.sellerAgentLocked.hidden = !(connected && isInstanceSeller && activeSellerRound)
   elements.sellerPublishActions.hidden = !connected || (hasInitialization && (!isInstanceSeller || (hasRound && !terminal && !canCancel)))
   elements.buyerCommitShell.hidden = !(role === 'buyer' && commitOpen)
   elements.sellerRevealShell.hidden = !(role === 'seller' && revealOpen && !reserveRevealed)
@@ -710,6 +750,7 @@ function renderTestnet() {
     revealEnd: testnet.round?.revealEnd,
     reserveRevealed,
   })
+  renderSellerSettlementSummary()
   if (testnet.busy) {
     const label = testnet.pending?.kind === 'init' ? '等待初始化确认…' : testnet.pending?.kind === 'deploy' ? '等待部署确认…' : '正在准备…'
     elements.deployModuleButton.textContent = label
@@ -745,6 +786,8 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
   }[role] ?? '观察者'
   elements.roleLabel.textContent = roleLabel
   elements.roleStage.textContent = stageLabel
+  const currentAccount = walletConnection?.accounts?.[0] ?? null
+  const isChainWinner = currentAccount !== null && currentAccount === chainWinner()
 
   if (!hasInitialization) {
     elements.roleGuidance.textContent = '当前尚无容量窗口。你可以作为卖家准备合约模块、创建实例，并在获得底价建议后发布。'
@@ -762,7 +805,9 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
     elements.roleGuidance.textContent = commitOpen
       ? '请输入你的最高愿付价格并提交隐藏报价。此时只锁定 2 CCD 保证金，报价金额不会公开。'
       : terminal
-      ? '该容量窗口已结束；可在结算结果与 Explorer 中查看公开证据。'
+      ? isChainWinner
+        ? '该容量窗口已结算。你是链上赢家，可在下方完成只读赢家核验。'
+        : '该容量窗口已结束；当前账户未中标，退款已按合约规则处理。可在结算结果与 Explorer 中查看公开证据。'
       : '当前不在买家承诺期，暂时没有可执行的买家操作。'
   } else if (role === 'committedBuyer') {
     elements.roleGuidance.textContent = revealOpen
@@ -772,7 +817,9 @@ function renderRoleSummary({ connected, role, stageLabel, hasInitialization, has
       : finalizeOpen
       ? '揭示期已结束，等待任意账户触发固定规则结算。'
       : terminal
-      ? '当前容量窗口已经结束；查看你的链上结果和退款记录。'
+      ? isChainWinner
+        ? '当前容量窗口已结算。你是链上赢家，可在下方完成只读赢家核验。'
+        : '当前容量窗口已结束；当前账户未中标，退款已按合约规则处理。'
       : '你的隐藏报价承诺已记录。请妥善保留当前浏览器中的揭示凭证，并等待揭示期。'
   } else if (finalizeOpen) {
     elements.roleGuidance.textContent = '揭示期已结束。任何已连接账户都可以触发一次固定规则结算。'
@@ -1061,6 +1108,174 @@ async function loadEvidence() {
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function loadJudgeJourney() {
+  try {
+    const response = await fetch('/evidence/judge-journey.json', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const payload = await response.json()
+    if (!Array.isArray(payload?.chainJourney?.steps) || !payload?.chainJourney?.result) {
+      throw new Error('证据快照缺少链上步骤或结算结果')
+    }
+    judgeJourney = payload
+  } catch (error) {
+    judgeJourney = { error: error instanceof Error ? error.message : String(error) }
+  }
+  renderJudgeJourney()
+}
+
+function renderJudgeJourney() {
+  if (runtime.mode !== 'public-readonly') return
+  elements.judgeDecisionEvidence.replaceChildren()
+  elements.judgeJourneySteps.replaceChildren()
+  elements.judgeJourneyResult.replaceChildren()
+
+  if (!judgeJourney) {
+    elements.judgeJourneyBadge.textContent = '正在读取证据'
+    elements.judgeJourneyBadge.className = 'badge badge-neutral'
+    return
+  }
+  if (judgeJourney.error) {
+    elements.judgeJourneyBadge.textContent = '证据不可用'
+    elements.judgeJourneyBadge.className = 'badge badge-danger'
+    elements.judgeJourneySummary.textContent = `无法展示评委观察路径：${judgeJourney.error}。公开页不会用占位交易补齐缺失数据。`
+    const empty = document.createElement('p')
+    empty.className = 'journey-empty'
+    empty.textContent = '请检查随仓库提交的 evidence/judge-journey.json 是否可访问。'
+    elements.judgeJourneySteps.append(empty)
+    return
+  }
+
+  const chain = judgeJourney.chainJourney
+  const decision = judgeJourney.sellerDecisionEvidence
+  const address = `<${chain.instance.index},${chain.instance.subindex}>`
+  elements.judgeJourneyBadge.textContent = `${judgeJourney.network} · ${address}`
+  elements.judgeJourneyBadge.className = 'badge badge-success'
+  elements.judgeJourneySummary.textContent = `${judgeJourney.service.name} · ${judgeJourney.service.capacityUnits} 个容量单位 · 规格指纹 ${shortHash(judgeJourney.service.serviceId)}。以下 ${chain.steps.length} 笔交易属于同一合约实例 ${address}；金额全部来自最终结算快照。`
+
+  renderJudgeDecision(decision)
+  for (const [index, step] of chain.steps.entries()) {
+    elements.judgeJourneySteps.append(renderJudgeJourneyStep(step, index + 1))
+  }
+  renderJudgeResult(chain)
+}
+
+function renderJudgeDecision(decision) {
+  if (!decision) {
+    elements.judgeDecisionEvidence.textContent = 'Seller Agent 决策证据未随公开构建提供。'
+    return
+  }
+  const heading = document.createElement('div')
+  heading.className = 'decision-evidence-heading'
+  const title = document.createElement('div')
+  const eyebrow = document.createElement('span')
+  const strong = document.createElement('strong')
+  eyebrow.textContent = '策略证据 · 独立评测集'
+  strong.textContent = `Seller Agent 建议将底价调整为 ${formatMicroCcd(decision.finalReserveMicroCcd)} CCD`
+  title.append(eyebrow, strong)
+  const badge = document.createElement('span')
+  badge.className = 'badge badge-success'
+  badge.textContent = `${decision.evaluation.finalDecisionCorrect}/${decision.evaluation.totalRuns} 最终动作正确`
+  heading.append(title, badge)
+
+  const reason = document.createElement('p')
+  const signalLabels = {
+    soldRate: '成交率',
+    averageBidderCount: '平均参与买家数',
+    previousAverageSurplus: '历史平均交易剩余',
+    supplyChange: '供给变化',
+  }
+  const reasons = decision.reasonSignals.map((item) => signalLabels[item] ?? item).join('、')
+  reason.textContent = `模型判断市场偏强，理由字段为：${reasons}。代码裁决后的最终动作是 ${decision.finalAction}；模型调用失败 ${decision.evaluation.modelCallFailures} 次。`
+
+  const meta = document.createElement('div')
+  meta.className = 'decision-evidence-meta'
+  const model = document.createElement('code')
+  model.textContent = `${decision.model} · ${decision.promptVersion}`
+  const link = document.createElement('a')
+  link.href = decision.evidenceUrl
+  link.target = '_blank'
+  link.rel = 'noreferrer'
+  link.textContent = '查看结构化评测证据 ↗'
+  meta.append(model, link)
+  elements.judgeDecisionEvidence.append(heading, reason, meta)
+}
+
+function renderJudgeJourneyStep(step, number) {
+  const item = document.createElement('li')
+  const index = document.createElement('span')
+  index.className = 'journey-step-index'
+  index.textContent = String(number).padStart(2, '0')
+  const content = document.createElement('div')
+  content.className = 'journey-step-content'
+  const heading = document.createElement('div')
+  const title = document.createElement('strong')
+  const time = document.createElement('time')
+  title.textContent = step.label
+  time.textContent = step.at ? formatDate(step.at) : '最终确认 · 时间未保留'
+  heading.append(title, time)
+  const detail = document.createElement('p')
+  detail.textContent = step.detail
+  const proof = document.createElement('a')
+  proof.href = step.explorerUrl
+  proof.target = '_blank'
+  proof.rel = 'noreferrer'
+  const proofLabel = document.createElement('span')
+  const hash = document.createElement('code')
+  proofLabel.textContent = '交易证据'
+  hash.textContent = shortHash(step.hash)
+  proof.append(proofLabel, hash)
+  content.append(heading, detail, proof)
+  item.append(index, content)
+  return item
+}
+
+function renderJudgeResult(chain) {
+  const result = chain.result
+  const heading = document.createElement('div')
+  heading.className = 'journey-result-heading'
+  const title = document.createElement('div')
+  const eyebrow = document.createElement('span')
+  const strong = document.createElement('strong')
+  eyebrow.textContent = '最终链上结果'
+  strong.textContent = `${result.phase} · 资金核对${result.reconciled ? '通过' : '未通过'}`
+  title.append(eyebrow, strong)
+  const link = document.createElement('a')
+  link.href = chain.instance.contractUrl
+  link.target = '_blank'
+  link.rel = 'noreferrer'
+  link.textContent = `打开合约 <${chain.instance.index},${chain.instance.subindex}> ↗`
+  heading.append(title, link)
+
+  const grid = document.createElement('dl')
+  const fields = [
+    ['赢家', shortAccountAddress(result.winner)],
+    ['卖家底价', `${formatMicroCcd(result.reserveMicroCcd)} CCD`],
+    ['赢家报价', `${formatMicroCcd(result.winningBidMicroCcd)} CCD`],
+    ['成交价', `${formatMicroCcd(result.clearingPriceMicroCcd)} CCD`],
+    ['交易剩余', `${formatMicroCcd(result.surplusMicroCcd)} CCD`],
+    ['平台费', `${formatMicroCcd(result.platformFeeMicroCcd)} CCD`],
+    ['买家退款合计', `${formatMicroCcd(result.totalRefundMicroCcd)} CCD`],
+    ['卖家所得', `${formatMicroCcd(result.sellerReceivesMicroCcd)} CCD`],
+    ['链上总托管', `${formatMicroCcd(result.totalDepositedMicroCcd)} CCD`],
+    ['合约余额', `${formatMicroCcd(result.contractBalanceMicroCcd)} CCD`],
+  ]
+  for (const [label, value] of fields) {
+    const row = document.createElement('div')
+    const term = document.createElement('dt')
+    const description = document.createElement('dd')
+    term.textContent = label
+    description.textContent = value
+    row.append(term, description)
+    grid.append(row)
+  }
+  const check = document.createElement('p')
+  check.className = result.reconciled ? 'journey-reconciled' : 'journey-unreconciled'
+  check.textContent = result.reconciled
+    ? `资金守恒：${formatMicroCcd(result.totalDepositedMicroCcd)} CCD = 卖家所得 + 平台费 + 买家退款，结算后合约余额为 0 CCD。`
+    : '资金核对未通过；不得把该快照视为已核验结算。'
+  elements.judgeJourneyResult.append(heading, grid, check)
 }
 
 async function loadPublishedMarketSettlements() {
@@ -1643,5 +1858,6 @@ render()
 void loadLocalSessionHistory()
 void loadServiceSpec()
 loadEvidence()
+loadJudgeJourney()
 loadPublishedMarketSettlements()
 loadAgentEvaluation()

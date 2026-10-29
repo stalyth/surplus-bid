@@ -7,7 +7,7 @@
     <title>SurplusBid · Agent-to-Agent capacity market</title>
     <link rel="stylesheet" href="/app/styles.css" />
   </head>
-  <body>
+  <body class="landing-page">
     <header class="site-header">
       <a class="brand" href="/" aria-label="SurplusBid 首页">
         <span class="brand-mark">S</span>
@@ -21,7 +21,7 @@
 
     <main class="landing-main">
       <section class="landing-hero">
-        <div>
+        <div class="landing-hero-copy">
           <p class="eyebrow">Agent-to-Agent market · Concordium Testnet</p>
           <h1>发现容量价格，<br />分享交易剩余。</h1>
           <p class="landing-lead">
@@ -29,30 +29,24 @@
           </p>
           <div class="landing-actions">
             <a class="button button-primary" href="/run">进入容量交易室</a>
-            <a class="button button-ghost" href="https://ccdexplorer.io/testnet/contract/13010/0" target="_blank" rel="noreferrer">打开 CCDExplorer ↗</a>
+            <a class="button button-ghost" href="https://ccdexplorer.io/testnet/contract/13026/0" target="_blank" rel="noreferrer">打开 CCDExplorer ↗</a>
           </div>
         </div>
         <aside class="landing-proof" aria-label="当前证据摘要">
-          <span class="badge badge-success">Testnet evidence</span>
-          <strong>&lt;13010,0&gt;</strong>
+          <span class="badge badge-success">Judge-ready evidence</span>
+          <strong>&lt;13026,0&gt;</strong>
           <dl>
             <div><dt>链上阶段</dt><dd>Settled</dd></div>
-            <div><dt>成交价</dt><dd>3 CCD</dd></div>
+            <div><dt>成交价</dt><dd>3.1 CCD</dd></div>
             <div><dt>合约余额</dt><dd>0 CCD</dd></div>
-            <div><dt>真实样本</dt><dd>n = 1</dd></div>
+            <div><dt>同规格成交</dt><dd>n = 3</dd></div>
           </dl>
-          <p>两笔承诺已经上链；账户 4jTMeo…5ePU 未揭示，因此本记录验证未揭示保证金路径，不代表两份已揭示报价的竞争。</p>
+          <p>两份买家承诺和两份报价揭示均已最终确认；规格摘要、赢家、成交价、平台费与退款可沿交易链接逐步核验。</p>
         </aside>
-      </section>
-
-      <section class="landing-section" aria-labelledby="how-title">
-        <div class="section-heading compact">
-          <div><p class="eyebrow">How it works</p><h2 id="how-title">三步完成容量分配</h2></div>
-        </div>
-        <ol class="landing-steps">
-          <li><span>01</span><h3>形成价格信号</h3><p>DeepSeek 综合成交率、参与人数、未成交和供给变化提出下一容量窗口的底价，代码执行涨幅与交易剩余约束。</p></li>
-          <li><span>02</span><h3>提交隐藏报价</h3><p>卖家底价和买家报价在承诺期只公开哈希；揭示后，金额永久公开并由合约验证。</p></li>
-          <li><span>03</span><h3>分享交易剩余</h3><p>合约确定赢家、计算中点成交价和平台费，并一次完成卖家收款与买家退款。</p></li>
+        <ol class="landing-step-rail" aria-label="三步完成容量分配">
+          <li><span>01</span><div><strong>形成价格信号</strong><small>Agent 建议底价，代码执行硬约束</small></div></li>
+          <li><span>02</span><div><strong>提交隐藏报价</strong><small>承诺期只公开哈希与链上顺序</small></div></li>
+          <li><span>03</span><div><strong>分享交易剩余</strong><small>合约选择赢家并完成 CCD 分账退款</small></div></li>
         </ol>
       </section>
 

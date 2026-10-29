@@ -22,6 +22,7 @@ await Promise.all([
   copy('app/styles.css', 'dist/app/styles.css'),
   copy('app/app.mjs', 'dist/app/app.mjs'),
   copy('src/concordium.mjs', 'dist/src/concordium.mjs'),
+  copy('src/market-history.mjs', 'dist/src/market-history.mjs'),
   copy('src/rules.mjs', 'dist/src/rules.mjs'),
   copy('public/service-spec.json', 'dist/service-spec.json'),
   copyTree('public/evidence', 'dist/evidence'),
