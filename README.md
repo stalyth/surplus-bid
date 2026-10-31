@@ -118,19 +118,17 @@ pnpm eval:decisions
 
 本地页面顶部的“本站交易账户”列表用于明确选择签名地址；“刷新授权账户”重新读取 Concordium Wallet 为本站开放的账户。若目标账户不在列表中，需先在钱包中允许该账户连接本站，再刷新。钱包首页左上角显示的账户不一定是本站获准使用的账户，发送前还应在钱包确认页核对签名地址。
 
-运行模式由 `/runtime-config.json` 明确声明。配置读取失败时页面默认进入 `public-readonly`，不会猜测域名或误开放动态操作。
+运行模式由构建根目录的 `runtime-config.json` 明确声明。配置读取失败时页面默认进入 `public-readonly`，不会猜测域名或误开放动态操作。
 
-### Vercel
+### GitHub Pages
 
-导入 `stalyth/surplus-bid` 仓库后使用：
+推送到 `main` 后，`.github/workflows/deploy-pages.yml` 会安装依赖、运行 `pnpm build`，并把 `dist/` 发布到 GitHub Pages：
 
 ```text
-Framework Preset: Other
-Build Command: pnpm build
-Output Directory: dist
+https://stalyth.github.io/surplus-bid/
 ```
 
-`vercel.json` 已记录相同设置及 `/run` 路由。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
+静态资源和证据 URL 使用项目相对路径，因此本地根路径预览和 GitHub Pages 的 `/surplus-bid/` 子路径使用同一份构建。`public/.nojekyll` 会随构建发布，为后续 `/.well-known/agent-card.json` 保留原样静态托管能力。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
 
 ## 信任与隐私边界
 

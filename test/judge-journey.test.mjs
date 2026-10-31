@@ -7,6 +7,7 @@ const market = JSON.parse(await readFile(new URL('../public/evidence/confirmed-m
 const landing = await readFile(new URL('../app/index.html', import.meta.url), 'utf8')
 const runPage = await readFile(new URL('../app/run/index.html', import.meta.url), 'utf8')
 const appSource = await readFile(new URL('../app/app.mjs', import.meta.url), 'utf8')
+const pagesWorkflow = await readFile(new URL('../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8')
 
 test('public judge journey contains a current-protocol, linkable Testnet path', () => {
   assert.equal(journey.protocolVersion, 'batch-allocation-v3')
@@ -44,8 +45,18 @@ test('judge path names the users, the traded service, and explains transaction s
   assert.match(landing, /Buyer Agents 隐藏报价/)
   assert.match(landing, /交易剩余<\/strong> = 买家报价 − 卖家底价/)
   assert.match(landing, /https:\/\/ccdexplorer\.io\/testnet\/contract\/13035\/0/)
-  assert.match(landing, /href="\/run#judge-journey"/)
+  assert.match(landing, /href="\.\/run\/#judge-journey"/)
   assert.ok(runPage.indexOf('id="judge-journey-result"') < runPage.indexOf('id="judge-journey-steps"'))
   assert.match(appSource, /独立策略评测 · 不属于本次/)
   assert.match(appSource, /不是当前链上底价的来源/)
+})
+
+test('public build is portable to the GitHub Pages project subpath', () => {
+  assert.doesNotMatch(landing, /(?:href|src)="\/(?!\/)/)
+  assert.doesNotMatch(runPage, /(?:href|src)="\/(?!\/)/)
+  assert.doesNotMatch(appSource, /from '\//)
+  assert.match(appSource, /publicAssetUrl\('runtime-config\.json'\)/)
+  assert.match(appSource, /publicAssetUrl\('evidence\/judge-journey\.json'\)/)
+  assert.match(pagesWorkflow, /actions\/deploy-pages@v4/)
+  assert.match(pagesWorkflow, /path: dist/)
 })

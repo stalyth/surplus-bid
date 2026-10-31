@@ -1,5 +1,5 @@
-import { formatCcd } from '/src/rules.mjs'
-import { createConfirmedSettlement } from '/src/market-history.mjs'
+import { formatCcd } from '../src/rules.mjs'
+import { createConfirmedSettlement } from '../src/market-history.mjs'
 import {
   ConcordiumClientError,
   connectConcordiumWallet,
@@ -25,7 +25,9 @@ import {
   submitFinalizeRound,
   submitReserveReveal,
   submitStartRound,
-} from '/src/concordium.mjs'
+} from '../src/concordium.mjs'
+
+const publicAssetUrl = (path) => new URL(`../${path.replace(/^\//, '')}`, import.meta.url)
 
 const runtime = await loadRuntimeConfig()
 let activity = []
@@ -1118,7 +1120,7 @@ async function loadEvidence() {
 
 async function loadJudgeJourney() {
   try {
-    const response = await fetch('/evidence/judge-journey.json', { cache: 'no-store' })
+    const response = await fetch(publicAssetUrl('evidence/judge-journey.json'), { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const payload = await response.json()
     if (payload?.evidenceStatus !== 'pending' && (!Array.isArray(payload?.chainJourney?.steps) || !payload?.chainJourney?.result)) {
@@ -1328,7 +1330,7 @@ function renderJudgeResult(chain) {
 
 async function loadPublishedMarketSettlements() {
   try {
-    const response = await fetch('/evidence/confirmed-market-settlements.json', { cache: 'no-store' })
+    const response = await fetch(publicAssetUrl('evidence/confirmed-market-settlements.json'), { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const payload = await response.json()
     publishedSettlements = Array.isArray(payload.settlements) ? payload.settlements : []
@@ -1340,7 +1342,7 @@ async function loadPublishedMarketSettlements() {
 
 async function loadServiceSpec() {
   try {
-    const response = await fetch('/service-spec.json', { cache: 'no-store' })
+    const response = await fetch(publicAssetUrl('service-spec.json'), { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const bytes = await response.arrayBuffer()
     const spec = JSON.parse(new TextDecoder().decode(bytes))
@@ -1817,7 +1819,7 @@ async function copyTransactionHash(hash, button) {
 async function loadAgentEvaluation() {
   if (runtime.agentApi) return
   try {
-    const response = await fetch('/evidence/seller-agent-evaluation.json', { cache: 'no-store' })
+    const response = await fetch(publicAssetUrl('evidence/seller-agent-evaluation.json'), { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const evidence = await response.json()
     const decision = evidence.representativeDecision
@@ -1835,7 +1837,7 @@ async function loadAgentEvaluation() {
 
 async function loadRuntimeConfig() {
   try {
-    const response = await fetch('/runtime-config.json', { cache: 'no-store' })
+    const response = await fetch(publicAssetUrl('runtime-config.json'), { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const value = await response.json()
     if (value?.mode !== 'local-live' && value?.mode !== 'public-readonly') throw new Error('mode 无效')
