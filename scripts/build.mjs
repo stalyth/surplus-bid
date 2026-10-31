@@ -23,7 +23,6 @@ await Promise.all([
   copy('src/market-history.mjs', 'dist/src/market-history.mjs'),
   copy('src/rules.mjs', 'dist/src/rules.mjs'),
   copy('public/service-spec.json', 'dist/service-spec.json'),
-  copy('public/.nojekyll', 'dist/.nojekyll'),
   copyTree('public/evidence', 'dist/evidence'),
   copy('node_modules/@concordium/web-sdk/lib/min/concordium.web.min.js', 'dist/vendor/concordium.web.min.js'),
   writeFile(resolve(distRoot, 'runtime-config.json'), `${JSON.stringify({

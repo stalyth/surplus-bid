@@ -120,15 +120,15 @@ pnpm eval:decisions
 
 运行模式由构建根目录的 `runtime-config.json` 明确声明。配置读取失败时页面默认进入 `public-readonly`，不会猜测域名或误开放动态操作。
 
-### GitHub Pages
+### Netlify
 
-推送到 `main` 后，`.github/workflows/deploy-pages.yml` 会安装依赖、运行 `pnpm build`，并把 `dist/` 发布到 GitHub Pages：
+当前公开只读站点：
 
 ```text
-https://stalyth.github.io/surplus-bid/
+https://visionary-duckanoo-9e2124.netlify.app/
 ```
 
-静态资源和证据 URL 使用项目相对路径，因此本地根路径预览和 GitHub Pages 的 `/surplus-bid/` 子路径使用同一份构建。公开只读构建不复制本机 Wasm/schema；合约构建与本地钱包交易仍由 `pnpm check` 和 `pnpm dev` 负责。`public/.nojekyll` 会随构建发布，为后续 `/.well-known/agent-card.json` 保留原样静态托管能力。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
+当前使用 Netlify 静态文件上传：运行 `pnpm build` 后上传 `dist/` 的内容。静态资源和证据 URL 使用相对路径，因此本地预览与 Netlify 共用同一份构建。公开只读构建不复制本机 Wasm/schema；合约构建与本地钱包交易仍由 `pnpm check` 和 `pnpm dev` 负责。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
 
 ## 信任与隐私边界
 
