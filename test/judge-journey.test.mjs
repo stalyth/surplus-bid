@@ -58,5 +58,6 @@ test('public build is portable to the GitHub Pages project subpath', () => {
   assert.match(appSource, /publicAssetUrl\('runtime-config\.json'\)/)
   assert.match(appSource, /publicAssetUrl\('evidence\/judge-journey\.json'\)/)
   assert.match(pagesWorkflow, /actions\/deploy-pages@v4/)
+  assert.match(pagesWorkflow, /enablement: true/)
   assert.match(pagesWorkflow, /path: dist/)
 })
