@@ -128,7 +128,7 @@ pnpm eval:decisions
 https://stalyth.github.io/surplus-bid/
 ```
 
-静态资源和证据 URL 使用项目相对路径，因此本地根路径预览和 GitHub Pages 的 `/surplus-bid/` 子路径使用同一份构建。`public/.nojekyll` 会随构建发布，为后续 `/.well-known/agent-card.json` 保留原样静态托管能力。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
+静态资源和证据 URL 使用项目相对路径，因此本地根路径预览和 GitHub Pages 的 `/surplus-bid/` 子路径使用同一份构建。公开只读构建不复制本机 Wasm/schema；合约构建与本地钱包交易仍由 `pnpm check` 和 `pnpm dev` 负责。`public/.nojekyll` 会随构建发布，为后续 `/.well-known/agent-card.json` 保留原样静态托管能力。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
 
 ## 信任与隐私边界
 
