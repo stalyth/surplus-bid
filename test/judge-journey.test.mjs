@@ -6,6 +6,7 @@ const journey = JSON.parse(await readFile(new URL('../public/evidence/judge-jour
 const market = JSON.parse(await readFile(new URL('../public/evidence/confirmed-market-settlements.json', import.meta.url), 'utf8'))
 const landing = await readFile(new URL('../app/index.html', import.meta.url), 'utf8')
 const runPage = await readFile(new URL('../app/run/index.html', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../app/app.mjs', import.meta.url), 'utf8')
 
 test('public judge journey contains a current-protocol, linkable Testnet path', () => {
   assert.equal(journey.protocolVersion, 'batch-allocation-v3')
@@ -39,7 +40,12 @@ test('public judge journey keeps model evaluation separate from future chain pro
 })
 
 test('judge path names the users, the traded service, and explains transaction surplus', () => {
-  assert.match(landing, /AI API 容量提供方 Agent/)
+  assert.match(landing, /AI API 提供方出售即将过期的优先执行容量/)
+  assert.match(landing, /Buyer Agents 隐藏报价/)
   assert.match(landing, /交易剩余<\/strong> = 买家报价 − 卖家底价/)
+  assert.match(landing, /https:\/\/ccdexplorer\.io\/testnet\/contract\/13035\/0/)
+  assert.match(landing, /href="\/run#judge-journey"/)
   assert.ok(runPage.indexOf('id="judge-journey-result"') < runPage.indexOf('id="judge-journey-steps"'))
+  assert.match(appSource, /独立策略评测 · 不属于本次/)
+  assert.match(appSource, /不是当前链上底价的来源/)
 })

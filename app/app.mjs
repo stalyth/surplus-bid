@@ -1194,7 +1194,9 @@ function renderJudgeDecision(decision) {
   const title = document.createElement('div')
   const eyebrow = document.createElement('span')
   const strong = document.createElement('strong')
-  eyebrow.textContent = '策略证据 · 独立评测集'
+  const instance = judgeJourney?.chainJourney?.instance
+  const instanceLabel = instance ? `<${instance.index},${instance.subindex}>` : '本次链上交易'
+  eyebrow.textContent = `独立策略评测 · 不属于本次 ${instanceLabel} 结算`
   strong.textContent = `Seller Agent 建议将底价调整为 ${formatMicroCcd(decision.finalReserveMicroCcd)} CCD`
   title.append(eyebrow, strong)
   const badge = document.createElement('span')
@@ -1210,7 +1212,7 @@ function renderJudgeDecision(decision) {
     supplyChange: '供给变化',
   }
   const reasons = decision.reasonSignals.map((item) => signalLabels[item] ?? item).join('、')
-  reason.textContent = `模型判断市场偏强，理由字段为：${reasons}。代码裁决后的最终动作是 ${decision.finalAction}；模型调用失败 ${decision.evaluation.modelCallFailures} 次。`
+  reason.textContent = `本评测只验证决策层，不是当前链上底价的来源。模型判断市场偏强，理由字段为：${reasons}。代码裁决后的最终动作是 ${decision.finalAction}；模型调用失败 ${decision.evaluation.modelCallFailures} 次。`
 
   const meta = document.createElement('div')
   meta.className = 'decision-evidence-meta'

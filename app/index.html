@@ -25,16 +25,19 @@
           <p class="eyebrow">Agent-to-Agent market · Concordium Testnet</p>
           <h1>发现容量价格，<br />分享交易剩余。</h1>
           <p class="landing-lead">
-            面向 AI API 容量提供方 Agent 和有紧急任务的买方 Agent：卖家发布即将过期的优先执行容量，买家用隐藏报价竞争，Concordium 合约选择赢家并结算 CCD。
+            AI API 提供方出售即将过期的优先执行容量，Buyer Agents 隐藏报价，合约分配容量并结算 CCD。
           </p>
-          <p class="surplus-definition"><strong>交易剩余</strong> = 买家报价 − 卖家底价；它既是后续定价信号，也按公开规则由参与方分享。</p>
+          <p class="surplus-definition"><strong>交易剩余</strong> = 买家报价 − 卖家底价；它是价格发现信号，也按公开规则由买卖双方分享。</p>
           <div class="landing-actions">
             <a class="button button-primary" href="/run">进入容量交易室</a>
           </div>
         </div>
         <aside class="landing-proof" aria-label="当前证据摘要">
           <span class="badge badge-success">Current protocol evidence</span>
-          <strong>&lt;13035,0&gt;</strong>
+          <a class="landing-proof-contract" href="https://ccdexplorer.io/testnet/contract/13035/0" target="_blank" rel="noreferrer">
+            <code>&lt;13035,0&gt;</code>
+            <span>打开 CCDExplorer ↗</span>
+          </a>
           <dl>
             <div><dt>链上阶段</dt><dd>Settled</dd></div>
             <div><dt>成交均价</dt><dd>1.975 CCD</dd></div>
@@ -42,6 +45,7 @@
             <div><dt>已确认成交</dt><dd>n = 4</dd></div>
           </dl>
           <p>双容量协议的最新结算已在 Testnet 最终确认且资金核对通过；旧协议实例不会进入此页或价格信号。</p>
+          <a class="landing-proof-detail" href="/run#judge-journey">查看完整交易证据 →</a>
         </aside>
         <ol class="landing-step-rail" aria-label="三步完成容量分配">
           <li><span>01</span><div><strong>卖家发布 AI API 容量</strong><small>Seller Agent 参考已确认成交建议底价</small></div></li>
