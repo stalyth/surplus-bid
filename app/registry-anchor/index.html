@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SurplusBid · Agent Card 锚定</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #07110c; color: #eef7f1; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+      main { width: min(720px, calc(100% - 40px)); border: 1px solid #2e6549; border-radius: 24px; padding: 32px; background: #0b1b12; }
+      h1 { margin: 0 0 12px; font-size: 2rem; }
+      p, li { color: #b8c9be; line-height: 1.65; }
+      code { color: #82f7b5; overflow-wrap: anywhere; }
+      .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+      button { border: 1px solid #438863; border-radius: 12px; padding: 13px 18px; background: #10301f; color: #82f7b5; font: inherit; font-weight: 700; cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: .45; }
+      #status { margin-top: 22px; padding: 15px; border: 1px solid #294b38; border-radius: 12px; min-height: 28px; }
+      a { color: #82f7b5; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>LOCAL-LIVE · CONCORDIUM TESTNET</p>
+      <h1>锚定 Seller Agent Card</h1>
+      <p>把线上 Agent Card 的原始字节 SHA-256 写入 Testnet Agent Registry。此操作转入 <strong>0 CCD</strong>，只需支付钱包显示的测试网网络费。</p>
+      <ul>
+        <li>Registry：<code>&lt;12802,0&gt;</code></li>
+        <li>Agent：<code>#979</code></li>
+        <li>入口：<code>CIS-8004.setAgentURI</code></li>
+        <li>哈希：<code>2a680d5d0019f7da8c2abf352f86927352937b1527560dd48ccde61d902c288a</code></li>
+      </ul>
+      <div class="actions">
+        <button id="connect" type="button">1. 连接注册账户</button>
+        <button id="anchor" type="button" disabled>2. 在钱包确认锚定</button>
+      </div>
+      <div id="status" role="status">尚未连接钱包。</div>
+    </main>
+    <script src="../vendor/concordium.web.min.js"></script>
+    <script type="module">
+      import { AGENT_REGISTRY, connectConcordiumWallet, shortAccountAddress, submitAgentCardAnchor } from '../src/concordium.mjs'
+
+      const connectButton = document.querySelector('#connect')
+      const anchorButton = document.querySelector('#anchor')
+      const status = document.querySelector('#status')
+      let connection
+
+      connectButton.addEventListener('click', async () => {
+        connectButton.disabled = true
+        status.textContent = '正在读取本站授权账户…'
+        try {
+          connection = await connectConcordiumWallet({ timeoutMs: 120_000 })
+          const account = connection.accounts[0]
+          if (account !== AGENT_REGISTRY.owner) {
+            throw new Error(`当前账户 ${shortAccountAddress(account)} 不是 Agent #979 的注册账户。`)
+          }
+          status.textContent = `已连接注册账户 ${shortAccountAddress(account)}。锚定交易尚未发出。`
+          anchorButton.disabled = false
+        } catch (error) {
+          connection = undefined
+          anchorButton.disabled = true
+          status.textContent = error instanceof Error ? error.message : String(error)
+        } finally {
+          connectButton.disabled = false
+        }
+      })
+
+      anchorButton.addEventListener('click', async () => {
+        anchorButton.disabled = true
+        status.textContent = '等待钱包确认 0 CCD 的 Agent Card 锚定交易…'
+        try {
+          const hash = await submitAgentCardAnchor(connection)
+          const href = `https://ccdexplorer.io/testnet/transaction/${hash}`
+          status.innerHTML = `钱包已返回交易哈希：<a href="${href}" target="_blank" rel="noreferrer">${hash}</a>。请等待最终确认后再核验卡片。`
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : String(error)
+          anchorButton.disabled = false
+        }
+      })
+    </script>
+  </body>
+</html>

@@ -125,10 +125,12 @@ pnpm eval:decisions
 当前公开只读站点：
 
 ```text
-https://visionary-duckanoo-9e2124.netlify.app/
+https://surplus-bid.netlify.app/
 ```
 
 当前使用 Netlify 静态文件上传：运行 `pnpm build` 后上传 `dist/` 的内容。静态资源和证据 URL 使用相对路径，因此本地预览与 Netlify 共用同一份构建。公开只读构建不复制本机 Wasm/schema；合约构建与本地钱包交易仍由 `pnpm check` 和 `pnpm dev` 负责。公开构建不需要、也不应配置 `LLM_API_KEY`；构建脚本会检查主要前端产物中没有私钥或模型密钥变量。
+
+Seller Agent 的 Agent Card 位于 `/.well-known/agent-card.json`。Testnet Agent Registry 已铸造 Agent `#979`，badge 短地址为 `JyP9XsMYjJ5UWf4PpVfN5`，Owner 为卖家账户 `4L6…RgbRdb`。卡片使用 Concordium 官方 Agent Registry MCP 的 `build_agent_badge` 合并真实 token 地址和 `registrations`；公开响应体 SHA-256 `2a680d5d0019f7da8c2abf352f86927352937b1527560dd48ccde61d902c288a` 已通过 [`setAgentURI`](https://ccdexplorer.io/testnet/transaction/4abba0c55c03564d791dcb1194f2bae968c115ff6fbbca3fa336f1f8d9e12b17) 锚定上链，官方 badge 核验返回有效。`local-live` 在新的 `start_round` 前实时核验 Active 状态、Card 哈希和注册钱包；公开构建只展示提交时的证据快照。Netlify Drop 会忽略压缩包中的点目录，因此公开构建同时复制一份完全相同的 `/agent-card.json`，并通过 `_redirects` 在原 URL 内部重写；对外 URI 和响应字节保持不变。
 
 ## 信任与隐私边界
 

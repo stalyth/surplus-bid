@@ -1,0 +1,70 @@
+{
+  "name": "SurplusBid Seller Agent",
+  "description": "Recommends the next reserve price for standardized, expiring AI API capacity using locally stored market history that has been reconciled against Concordium Testnet settlement transactions and contract view state. Hard-coded policy constraints remain authoritative, and the seller must confirm each market window with their wallet.",
+  "url": "https://surplus-bid.netlify.app/.well-known/agent-card.json",
+  "version": "0.1.0",
+  "defaultInputModes": [
+    "text/markdown",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "text/markdown",
+    "application/json"
+  ],
+  "authentication": {
+    "schemes": []
+  },
+  "skills": [
+    {
+      "id": "recommend-next-reserve",
+      "name": "Recommend next reserve price",
+      "description": "Returns a structured reserve-price recommendation and rationale from verified settlement history, subject to deterministic pricing and safety constraints.",
+      "tags": [
+        "pricing",
+        "market-history",
+        "concordium",
+        "ai-api-capacity"
+      ]
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extensions": [
+      {
+        "uri": "https://docs.concordium.com/a2a-extensions/concordium-badge/v1",
+        "description": "Verified by Concordium badge — on-chain agent identity in a CIS-8004 registry",
+        "required": false,
+        "params": {
+          "tokenAddress": "ccd:4221332d34e1694168c2a0c0b3fd0f27/cis-2:JyP9XsMYjJ5UWf4PpVfN5",
+          "owner": {
+            "account": "ccd:4221332d34e1694168c2a0c0b3fd0f27:4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb"
+          },
+          "agentWallet": "ccd:4221332d34e1694168c2a0c0b3fd0f27:4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb",
+          "contracts": {
+            "cis8004": "ccd:4221332d34e1694168c2a0c0b3fd0f27:12802.0",
+            "cis8": "ccd:4221332d34e1694168c2a0c0b3fd0f27:12801.0"
+          },
+          "verify": "Resolve tokenAddress via CIS-8004 agent_of; confirm owner + status=Active + card SHA-256 == metadata_hash.",
+          "verification": {
+            "service": "Concordium Agent Registry",
+            "verifyUrl": "https://agent-registry-mcp.concordium.com/v1/badge-check/JyP9XsMYjJ5UWf4PpVfN5",
+            "mcp": "https://agent-registry-mcp.concordium.com/mcp",
+            "docs": "https://docs.concordium.com/en/mainnet/technical-reference/agent-registry/concordium-badge.html"
+          }
+        }
+      }
+    ]
+  },
+  "provider": {
+    "organization": "SurplusBid",
+    "url": "https://surplus-bid.netlify.app/"
+  },
+  "documentationUrl": "https://surplus-bid.netlify.app/run/",
+  "registrations": [
+    {
+      "agentId": 979,
+      "agentRegistry": "ccd:4221332d34e1694168c2a0c0b3fd0f27:12802.0"
+    }
+  ]
+}

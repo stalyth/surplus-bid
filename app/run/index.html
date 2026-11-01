@@ -51,6 +51,12 @@
           <span class="badge badge-neutral" id="judge-journey-badge">正在读取证据</span>
         </div>
         <p class="judge-journey-intro" id="judge-journey-summary">公开页仅读取随仓库提交、且属于当前协议的 Testnet 证据快照；无需连接钱包。</p>
+        <article class="identity-evidence" id="seller-identity-evidence" aria-label="Seller Agent 身份证据">
+          <div class="identity-evidence-heading">
+            <div><span>Seller Agent identity</span><strong>正在读取 Testnet Agent Registry 证据…</strong></div>
+            <span class="badge badge-neutral">等待核验快照</span>
+          </div>
+        </article>
         <article class="journey-result" id="judge-journey-result" aria-label="链上结算结果"></article>
         <article class="decision-evidence" id="judge-decision-evidence" aria-label="Seller Agent 决策证据"></article>
         <div class="journey-detail-heading">
@@ -127,6 +133,14 @@
                 <div class="panel-kicker"><span>AI</span> Seller Agent 建议</div>
                 <h5 id="seller-agent-title">决定下一容量窗口的底价</h5>
                 <p>Seller Agent 根据已确认的历史提出底价建议。代码会核验涨幅、供给变化与交易剩余约束；卖家始终在钱包中确认发布。</p>
+                <section class="seller-identity-gate" aria-labelledby="seller-identity-gate-title">
+                  <div>
+                    <strong id="seller-identity-gate-title">Seller Agent 身份</strong>
+                    <span class="badge badge-warning" id="seller-identity-badge">等待实时核验</span>
+                  </div>
+                  <p id="seller-identity-status">发布新容量窗口前，必须核验 Agent #979 为 Active、卡片哈希匹配，且当前钱包属于注册卖家。</p>
+                  <button class="button button-ghost" id="seller-identity-refresh" type="button">刷新身份核验</button>
+                </section>
                 <button class="button button-secondary" id="seller-decision-button" type="button">获取底价建议</button>
                 <label class="bid-amount-control" id="seller-reserve-control" for="seller-reserve-input" hidden>
                   <span>本轮卖家底价（CCD）</span>

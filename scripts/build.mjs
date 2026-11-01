@@ -9,6 +9,7 @@ await rm(distRoot, { recursive: true, force: true })
 
 await Promise.all([
   mkdir(resolve(distRoot, 'app'), { recursive: true }),
+  mkdir(resolve(distRoot, '.well-known'), { recursive: true }),
   mkdir(resolve(distRoot, 'run'), { recursive: true }),
   mkdir(resolve(distRoot, 'src'), { recursive: true }),
   mkdir(resolve(distRoot, 'vendor'), { recursive: true }),
@@ -20,9 +21,12 @@ await Promise.all([
   copy('app/styles.css', 'dist/app/styles.css'),
   copy('app/app.mjs', 'dist/app/app.mjs'),
   copy('src/concordium.mjs', 'dist/src/concordium.mjs'),
+  copy('src/agent-registry.mjs', 'dist/src/agent-registry.mjs'),
   copy('src/market-history.mjs', 'dist/src/market-history.mjs'),
   copy('src/rules.mjs', 'dist/src/rules.mjs'),
   copy('public/service-spec.json', 'dist/service-spec.json'),
+  copy('public/.well-known/agent-card.json', 'dist/.well-known/agent-card.json'),
+  copy('public/.well-known/agent-card.json', 'dist/agent-card.json'),
   copyTree('public/evidence', 'dist/evidence'),
   copy('node_modules/@concordium/web-sdk/lib/min/concordium.web.min.js', 'dist/vendor/concordium.web.min.js'),
   writeFile(resolve(distRoot, 'runtime-config.json'), `${JSON.stringify({
@@ -30,12 +34,15 @@ await Promise.all([
     agentApi: false,
     walletActions: false,
   }, null, 2)}\n`),
+  writeFile(resolve(distRoot, '_redirects'), '/.well-known/agent-card.json /agent-card.json 200\n'),
 ])
 
 await assertNoSecretConfiguration([
   'dist/index.html',
   'dist/run/index.html',
   'dist/app/app.mjs',
+  'dist/.well-known/agent-card.json',
+  'dist/agent-card.json',
   'dist/runtime-config.json',
 ])
 

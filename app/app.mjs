@@ -1,5 +1,6 @@
 import { formatCcd } from '../src/rules.mjs'
 import { createConfirmedSettlement } from '../src/market-history.mjs'
+import { SELLER_AGENT_IDENTITY, sellerIdentityAllowsPublish } from '../src/agent-registry.mjs'
 import {
   ConcordiumClientError,
   connectConcordiumWallet,
@@ -38,6 +39,7 @@ let confirmedSettlements = []
 let publishedSettlements = []
 let serviceSpec = null
 let serviceSpecError = null
+let sellerIdentity = { snapshot: null, live: null, loading: false, error: null }
 let testnet = { status: null, deployment: null, initialization: null, round: null, view: null, startPlan: null, bidPlan: null, sellerDecision: null, sellerHistory: null, sellerReserveMicroCcd: null, transactions: [], pending: null, busy: false, agentBusy: false, winnerVerification: null }
 
 const elements = {
@@ -59,6 +61,10 @@ const elements = {
   sellerReserveInput: byId('seller-reserve-input'),
   sellerDecisionStatus: byId('seller-decision-status'),
   sellerAgentCard: byId('seller-agent-card'),
+  sellerIdentityEvidence: byId('seller-identity-evidence'),
+  sellerIdentityBadge: byId('seller-identity-badge'),
+  sellerIdentityStatus: byId('seller-identity-status'),
+  sellerIdentityRefresh: byId('seller-identity-refresh'),
   sellerAgentLocked: byId('seller-agent-locked'),
   deployModuleButton: byId('deploy-module-button'),
   initContractButton: byId('init-contract-button'),
@@ -166,6 +172,11 @@ elements.sellerReserveInput.addEventListener('input', () => {
   render()
 })
 
+elements.sellerIdentityRefresh.addEventListener('click', () => {
+  if (!runtime.agentApi || sellerIdentity.loading) return
+  void refreshSellerIdentityVerification()
+})
+
 elements.walletButton.addEventListener('click', async () => {
   if (!runtime.walletActions) return
   elements.walletButton.disabled = true
@@ -178,6 +189,7 @@ elements.walletButton.addEventListener('click', async () => {
     testnet.bidPlan = testnet.initialization ? loadBidRevealBackup(testnet.initialization, account) : null
     record(`本站已授权 ${walletConnection.authorizedAccounts.length} 个 Testnet 账户；当前交易账户 ${shortAccountAddress(account)}。`)
     await refreshTestnetStatus()
+    await refreshSellerIdentityVerification()
     setMessage(`本站交易账户：${shortAccountAddress(account)}。如与钱包首页不同，请从顶部列表明确选择；缺少账户则先在钱包中授权本站。`, 'success')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -403,6 +415,10 @@ elements.readViewButton.addEventListener('click', () => {
 elements.startRoundButton.addEventListener('click', () => {
   runTestnetAction('start_round', async () => {
     const connection = transactionConnection()
+    const verification = await refreshSellerIdentityVerification({ required: true, renderAfter: false })
+    if (!sellerIdentityAllowsPublish(verification, connection.accounts[0])) {
+      throw new ConcordiumClientError('SELLER_IDENTITY_REQUIRED', 'Seller Agent 身份、卡片哈希或注册钱包核验未通过；未请求钱包发布容量窗口。')
+    }
     const decision = testnet.sellerDecision
     if (!decision) throw new ConcordiumClientError('SELLER_DECISION_REQUIRED', '请先获取 Seller Agent 底价建议。')
     const selectedReserveMicroCcd = parseCcdToMicroCcd(elements.sellerReserveInput.value)
@@ -475,6 +491,7 @@ async function runTestnetAction(kind, action) {
 
 function render() {
   renderServiceSpec()
+  renderSellerIdentity()
   const livePhase = phaseName(testnet.view?.state?.phase)
   const liveWindow = testnet.initialization?.address
 
@@ -557,6 +574,115 @@ function renderServiceSpec() {
     elements.serviceBindingStatus.textContent = '不一致：当前实例并未绑定这份容量规格；不会用于赢家核验。'
     elements.serviceBindingStatus.dataset.tone = 'error'
   }
+}
+
+function renderSellerIdentity() {
+  elements.sellerIdentityRefresh.disabled = !runtime.agentApi || sellerIdentity.loading
+  if (!runtime.agentApi) {
+    elements.sellerIdentityBadge.textContent = '公开证据快照'
+    elements.sellerIdentityBadge.className = 'badge badge-neutral'
+    elements.sellerIdentityStatus.textContent = '公开构建不会实时调用 Registry；请查看上方提交时的身份证据快照。'
+  } else if (sellerIdentity.loading) {
+    elements.sellerIdentityBadge.textContent = '核验中'
+    elements.sellerIdentityBadge.className = 'badge badge-warning'
+    elements.sellerIdentityStatus.textContent = '正在通过 Concordium 官方 badge 核验入口读取 Agent #979 的链上状态和卡片哈希。'
+  } else if (sellerIdentity.live?.ok) {
+    const wallet = walletConnection?.accounts?.[0] ?? null
+    const matchesWallet = wallet === sellerIdentity.live.registeredSeller
+    elements.sellerIdentityBadge.textContent = matchesWallet ? 'Verified by Concordium' : '钱包不匹配'
+    elements.sellerIdentityBadge.className = `badge ${matchesWallet ? 'badge-success' : 'badge-danger'}`
+    elements.sellerIdentityStatus.textContent = matchesWallet
+      ? `Active · Agent Card 哈希匹配 · 注册卖家 ${shortAccountAddress(sellerIdentity.live.registeredSeller)} 与当前钱包一致。`
+      : `Agent #979 有效，但注册卖家是 ${shortAccountAddress(sellerIdentity.live.registeredSeller)}；当前钱包不能发布新容量窗口。`
+  } else if (sellerIdentity.error) {
+    elements.sellerIdentityBadge.textContent = '核验未通过'
+    elements.sellerIdentityBadge.className = 'badge badge-danger'
+    elements.sellerIdentityStatus.textContent = `${sellerIdentity.error} 新容量窗口保持禁用；已开始轮次的揭示、取消、退款和结算不受影响。`
+  } else {
+    elements.sellerIdentityBadge.textContent = '等待实时核验'
+    elements.sellerIdentityBadge.className = 'badge badge-warning'
+    elements.sellerIdentityStatus.textContent = '发布新容量窗口前，必须核验 Agent #979 为 Active、卡片哈希匹配，且当前钱包属于注册卖家。'
+  }
+
+  const card = elements.sellerIdentityEvidence
+  card.replaceChildren()
+  const heading = document.createElement('div')
+  heading.className = 'identity-evidence-heading'
+  const title = document.createElement('div')
+  const label = document.createElement('span')
+  label.textContent = 'Seller Agent identity'
+  const strong = document.createElement('strong')
+  const badge = document.createElement('span')
+  if (!sellerIdentity.snapshot) {
+    strong.textContent = '正在读取 Testnet Agent Registry 证据…'
+    badge.textContent = '等待核验快照'
+    badge.className = 'badge badge-neutral'
+    title.append(label, strong)
+    heading.append(title, badge)
+    card.append(heading)
+    return
+  }
+  const snapshot = sellerIdentity.snapshot
+  strong.textContent = `${snapshot.agentName} · Agent #${snapshot.agentId}`
+  badge.textContent = snapshot.checks?.badgeValid && snapshot.checks?.cardHashMatched ? 'Verified by Concordium' : '证据不完整'
+  badge.className = `badge ${snapshot.checks?.badgeValid && snapshot.checks?.cardHashMatched ? 'badge-success' : 'badge-danger'}`
+  title.append(label, strong)
+  heading.append(title, badge)
+  const summary = document.createElement('p')
+  summary.textContent = `${snapshot.status} · 卡片 SHA-256 ${shortHash(snapshot.metadataHash)} 与链上锚点一致 · Owner ${shortAccountAddress(snapshot.owner)}。这是 ${formatDate(snapshot.verifiedAt)} 提交的静态证据快照，不是持续监控。`
+  const links = document.createElement('div')
+  links.className = 'identity-evidence-links'
+  for (const [text, href] of [
+    ['官方 badge 核验 ↗', snapshot.officialVerificationUrl],
+    ['Agent Card ↗', snapshot.agentCardUrl],
+    ['注册交易 ↗', snapshot.registrationTransaction?.explorerUrl],
+    ['卡片锚定交易 ↗', snapshot.cardAnchorTransaction?.explorerUrl],
+  ]) {
+    if (!href) continue
+    const link = document.createElement('a')
+    link.textContent = text
+    link.href = href
+    link.target = '_blank'
+    link.rel = 'noreferrer'
+    links.append(link)
+  }
+  card.append(heading, summary, links)
+}
+
+async function refreshSellerIdentityVerification({ required = false, renderAfter = true } = {}) {
+  sellerIdentity.loading = true
+  sellerIdentity.error = null
+  if (renderAfter) render()
+  try {
+    const verification = await requestJson('/api/agent-registry/seller', {
+      timeoutMs: 12_000,
+      timeoutMessage: 'Agent Registry 核验超时；未请求钱包发布新容量窗口。',
+    })
+    sellerIdentity.live = verification
+    return verification
+  } catch (error) {
+    sellerIdentity.live = null
+    sellerIdentity.error = error instanceof Error ? error.message : String(error)
+    if (required) throw error
+    return null
+  } finally {
+    sellerIdentity.loading = false
+    if (renderAfter) render()
+  }
+}
+
+async function loadSellerIdentityEvidence() {
+  try {
+    const response = await fetch(publicAssetUrl('evidence/seller-agent-registry.json'), { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const snapshot = await response.json()
+    if (snapshot?.evidenceStatus !== 'verified') throw new Error('身份快照未标记为 verified')
+    sellerIdentity.snapshot = snapshot
+  } catch (error) {
+    sellerIdentity.snapshot = null
+    if (!sellerIdentity.error) sellerIdentity.error = `身份公开证据读取失败：${error instanceof Error ? error.message : String(error)}`
+  }
+  render()
 }
 
 function serviceBindingMatches() {
@@ -724,7 +850,8 @@ function renderTestnet() {
   elements.initContractButton.disabled = !connected || !hasStatus || !hasCurrentContractArtifact || testnet.busy || !canCreateReplacement || testnet.pending !== null
   elements.readViewButton.disabled = !connected || !hasInitialization || testnet.busy || testnet.pending !== null
   const decisionReady = testnet.sellerDecision !== null && isValidSellerReserveInput()
-  elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !serviceBound || !isInstanceSeller || hasRound || !decisionReady || testnet.busy || testnet.pending !== null
+  const identityReady = sellerIdentityAllowsPublish(sellerIdentity.live, currentWalletAccount)
+  elements.startRoundButton.disabled = !connected || !hasCurrentContractArtifact || !hasInitialization || !serviceBound || !isInstanceSeller || hasRound || !decisionReady || !identityReady || testnet.busy || testnet.pending !== null
   elements.cancelRoundButton.disabled = !connected || !isInstanceSeller || !canCancel || testnet.busy || testnet.pending !== null
   elements.backupReserveButton.disabled = testnet.startPlan === null
   const canCommitBid = connected && serviceBound && commitOpen && !isInstanceSeller && !bidAddresses.has(currentWalletAccount) && !testnet.busy && testnet.pending === null
@@ -1892,6 +2019,8 @@ renderRuntimeMode()
 render()
 void loadLocalSessionHistory()
 void loadServiceSpec()
+void loadSellerIdentityEvidence()
+if (runtime.agentApi) void refreshSellerIdentityVerification()
 loadEvidence()
 loadJudgeJourney()
 loadPublishedMarketSettlements()

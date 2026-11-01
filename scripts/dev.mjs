@@ -21,6 +21,7 @@ import { ConcordiumGRPCNodeClient, credentials } from '@concordium/web-sdk/nodej
 import { decideNextReserve } from '../src/decision.mjs'
 import { buildTestnetDecisionHistory } from '../src/decision-history.mjs'
 import { createConfirmedSettlement, isConfirmedSettlement } from '../src/market-history.mjs'
+import { SELLER_AGENT_IDENTITY, normalizeSellerBadgeVerification } from '../src/agent-registry.mjs'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 loadLocalEnv(resolve(repoRoot, '.env'))
@@ -34,6 +35,7 @@ const capacityUnits = 2
 const maxBids = 3
 const sessionHistoryPath = resolve(repoRoot, 'runtime', 'session-activity.json')
 const serviceSpecPath = resolve(repoRoot, 'public', 'service-spec.json')
+const agentRegistrySchemaUrl = 'https://testnet-agent-registry.concordium.com/agent_registry_schema.b64'
 const testnetClient = new ConcordiumGRPCNodeClient(
   'grpc.testnet.concordium.com', 20_000, credentials.createSsl(), { timeout: 10_000 },
 )
@@ -75,6 +77,29 @@ const server = createServer(async (request, response) => {
       const source = readFileSync(serviceSpecPath)
       response.writeHead(200, { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff' })
       response.end(request.method === 'HEAD' ? undefined : source)
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/api/agent-registry/schema') {
+      const registryResponse = await fetch(agentRegistrySchemaUrl, { signal: AbortSignal.timeout(10_000) })
+      if (!registryResponse.ok) throw new Error(`Agent Registry schema 返回 HTTP ${registryResponse.status}。`)
+      const schema = (await registryResponse.text()).trim()
+      if (schema.length === 0) throw new Error('Agent Registry schema 为空。')
+      response.writeHead(200, {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Content-Type-Options': 'nosniff',
+      })
+      response.end(`${schema}\n`)
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/api/agent-registry/seller') {
+      const verificationResponse = await fetch(SELLER_AGENT_IDENTITY.verifyUrl, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!verificationResponse.ok) throw new Error(`Agent Registry 核验返回 HTTP ${verificationResponse.status}。`)
+      const verification = normalizeSellerBadgeVerification(await verificationResponse.json())
+      sendJson(response, 200, verification)
       return
     }
     if (request.method === 'POST' && url.pathname === '/api/agent/decide') {
@@ -961,6 +986,7 @@ function loadLocalEnv(path) {
 function resolvePublicFile(pathname) {
   if (pathname === '/') return resolve(repoRoot, 'app/index.html')
   if (pathname === '/run' || pathname === '/run/') return resolve(repoRoot, 'app/run/index.html')
+  if (pathname === '/registry-anchor' || pathname === '/registry-anchor/') return resolve(repoRoot, 'app/registry-anchor/index.html')
   let decoded
   try { decoded = decodeURIComponent(pathname) } catch { return null }
   for (const [prefix, root] of publicRoots) {

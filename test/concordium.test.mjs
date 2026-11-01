@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import * as sdk from '@concordium/web-sdk'
 
 import {
+  AGENT_REGISTRY,
   CONCORDIUM_TESTNET_GENESIS_HASH,
   ConcordiumClientError,
   INITIAL_MARKET,
@@ -20,6 +21,7 @@ import {
   prepareBidCommitment,
   selectWalletAccount,
   shortAccountAddress,
+  submitAgentCardAnchor,
   verifyWalletAuthorization,
 } from '../src/concordium.mjs'
 
@@ -46,6 +48,53 @@ test('rejects a wallet connected to another network before any contract action',
 
 test('shortens a public account address for the connected-wallet status', () => {
   assert.equal(shortAccountAddress('4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb'), '4L6swf…RgbRdb')
+})
+
+test('anchors the deployed Agent Card through the registered owner and official Registry schema', async () => {
+  const originalWindow = globalThis.window
+  const originalFetch = globalThis.fetch
+  const sent = []
+  const provider = {
+    requestAccounts: async () => [AGENT_REGISTRY.owner],
+    getSelectedChain: async () => CONCORDIUM_TESTNET_GENESIS_HASH,
+    sendTransaction: async (...args) => {
+      sent.push(args)
+      return 'ab'.repeat(32)
+    },
+  }
+  globalThis.window = { concordiumSDK: sdk, concordium: provider }
+  globalThis.fetch = async (url) => {
+    assert.equal(url, '/api/agent-registry/schema')
+    return new Response('registry-schema-base64\n')
+  }
+  try {
+    const connection = {
+      provider,
+      accounts: [AGENT_REGISTRY.owner],
+      authorizedAccounts: [AGENT_REGISTRY.owner],
+      chain: CONCORDIUM_TESTNET_GENESIS_HASH,
+    }
+    const hash = await submitAgentCardAnchor(connection)
+    assert.equal(hash, 'ab'.repeat(32))
+    assert.equal(sent.length, 1)
+    const [sender, transactionType, payload, parameters, schemaBase64] = sent[0]
+    assert.equal(sender, AGENT_REGISTRY.owner)
+    assert.equal(transactionType, sdk.AccountTransactionType.Update)
+    assert.equal(String(payload.receiveName), 'CIS-8004.setAgentURI')
+    assert.equal(payload.address.index, 12802n)
+    assert.equal(payload.address.subindex, 0n)
+    assert.equal(sdk.CcdAmount.toMicroCcd(payload.amount).toFixed(0), '0')
+    assert.equal(parameters.token_id, 'd303000000000000')
+    assert.deepEqual(parameters.agent_uri, { Some: [AGENT_REGISTRY.agentUri] })
+    assert.deepEqual(parameters.metadata_hash, { Some: [[
+      42, 104, 13, 93, 0, 25, 247, 218, 140, 42, 191, 53, 47, 134, 146, 115,
+      82, 147, 123, 21, 39, 86, 13, 212, 140, 205, 230, 29, 144, 44, 40, 138,
+    ]] })
+    assert.equal(schemaBase64, 'registry-schema-base64')
+  } finally {
+    globalThis.window = originalWindow
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('uses the confirmed 2 CCD guarantee and platform account for initialization', () => {

@@ -99,6 +99,13 @@ body[data-runtime-mode="public-readonly"] #wallet-button,
 body[data-runtime-mode="public-readonly"] #wallet-account-control { display: none !important; }
 .judge-journey { margin: 0 0 18px; padding: 30px; border: 1px solid #355845; border-radius: var(--radius); background: linear-gradient(145deg, rgba(16, 31, 23, .94), rgba(15, 18, 17, .96)); }
 .judge-journey-intro { max-width: 820px; margin: -5px 0 22px; color: var(--muted); font-size: .88rem; line-height: 1.7; }
+.identity-evidence { margin: 0 0 18px; padding: 18px; border: 1px solid #3d6a4f; border-radius: 13px; background: #0c1811; }
+.identity-evidence-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.identity-evidence-heading > div { display: grid; gap: 6px; }
+.identity-evidence-heading div > span { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.identity-evidence p { margin: 13px 0; color: #c4cfc8; font-size: .78rem; line-height: 1.65; }
+.identity-evidence-links { display: flex; flex-wrap: wrap; gap: 16px; }
+.identity-evidence a { color: var(--green); font-size: .72rem; font-weight: 800; text-decoration: none; }
 .decision-evidence { margin-top: 18px; padding: 18px; border: 1px solid #4d4930; border-radius: 13px; background: #19170f; }
 .decision-evidence:empty { display: none; }
 .decision-evidence-heading, .journey-result-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -208,6 +215,10 @@ dd { margin: 7px 0 0; font-size: 1.08rem; font-weight: 800; }
 .seller-agent-card h5 { margin: 0 0 8px; color: var(--text); font-size: .9rem; }
 .seller-agent-card p { margin: 0 0 13px; font-size: .78rem; }
 .seller-agent-card code { color: var(--amber); }
+.seller-identity-gate { margin: 14px 0; padding: 13px; border: 1px solid #355845; border-radius: 11px; background: #0d1812; }
+.seller-identity-gate > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.seller-identity-gate p { margin: 10px 0 12px; color: #aebdb5; font-size: .72rem; line-height: 1.55; }
+.seller-identity-gate .button { min-height: 34px; padding: 7px 11px; font-size: .7rem; }
 .seller-agent-locked { margin: 18px 0 0; padding: 11px 13px; border: 1px solid #4d4930; border-radius: 10px; background: rgba(255, 211, 122, .07); color: #d9caa8; font-size: .75rem; line-height: 1.5; }
 .seller-agent-locked[hidden] { display: none; }
 .testnet-panel { border-color: #355845; background: #101a14; }
@@ -324,6 +335,8 @@ dd { margin: 7px 0 0; font-size: 1.08rem; font-weight: 800; }
 .landing-lead { max-width: 720px; margin: 28px 0; color: #bdc7c1; font-size: 1.08rem; line-height: 1.8; }
 .landing-lead + .surplus-definition { margin-top: -16px; }
 .landing-proof { padding: 24px; border: 1px solid #396248; border-radius: var(--radius); background: linear-gradient(145deg, rgba(23, 37, 30, .96), rgba(15, 18, 17, .96)); box-shadow: 0 25px 80px rgba(0, 0, 0, .28); }
+.landing-proof-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.landing-proof-badges a { text-decoration: none; }
 .landing-proof-contract { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 20px 0 12px; color: var(--green); text-decoration: none; }
 .landing-proof-contract code { color: inherit; font-family: ui-monospace, monospace; font-size: 1.4rem; font-weight: 800; }
 .landing-proof-contract span, .landing-proof-detail { color: var(--green); font-size: .72rem; font-weight: 800; }

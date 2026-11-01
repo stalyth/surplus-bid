@@ -7,6 +7,9 @@ const market = JSON.parse(await readFile(new URL('../public/evidence/confirmed-m
 const landing = await readFile(new URL('../app/index.html', import.meta.url), 'utf8')
 const runPage = await readFile(new URL('../app/run/index.html', import.meta.url), 'utf8')
 const appSource = await readFile(new URL('../app/app.mjs', import.meta.url), 'utf8')
+const agentCardSource = await readFile(new URL('../public/.well-known/agent-card.json', import.meta.url), 'utf8')
+const agentCard = JSON.parse(agentCardSource)
+const buildSource = await readFile(new URL('../scripts/build.mjs', import.meta.url), 'utf8')
 
 test('public judge journey contains a current-protocol, linkable Testnet path', () => {
   assert.equal(journey.protocolVersion, 'batch-allocation-v3')
@@ -56,4 +59,33 @@ test('public build uses portable relative URLs for static hosting', () => {
   assert.doesNotMatch(appSource, /from '\//)
   assert.match(appSource, /publicAssetUrl\('runtime-config\.json'\)/)
   assert.match(appSource, /publicAssetUrl\('evidence\/judge-journey\.json'\)/)
+})
+
+test('registered Seller Agent Card carries the official Testnet badge coordinates', () => {
+  assert.equal(agentCard.name, 'SurplusBid Seller Agent')
+  assert.equal(agentCard.url, 'https://surplus-bid.netlify.app/.well-known/agent-card.json')
+  assert.equal(agentCard.skills.length, 1)
+  assert.equal(agentCard.skills[0].id, 'recommend-next-reserve')
+
+  const badge = agentCard.capabilities.extensions.find(
+    (extension) => extension.uri === 'https://docs.concordium.com/a2a-extensions/concordium-badge/v1',
+  )
+  assert.ok(badge)
+  assert.equal(
+    badge.params.tokenAddress,
+    'ccd:4221332d34e1694168c2a0c0b3fd0f27/cis-2:JyP9XsMYjJ5UWf4PpVfN5',
+  )
+  assert.equal(badge.params.contracts.cis8004, 'ccd:4221332d34e1694168c2a0c0b3fd0f27:12802.0')
+  assert.equal(badge.params.contracts.cis8, 'ccd:4221332d34e1694168c2a0c0b3fd0f27:12801.0')
+  assert.match(badge.params.owner.account, /:4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb$/)
+  assert.equal(badge.params.verification.verifyUrl, 'https://agent-registry-mcp.concordium.com/v1/badge-check/JyP9XsMYjJ5UWf4PpVfN5')
+  assert.deepEqual(agentCard.registrations, [
+    {
+      agentId: 979,
+      agentRegistry: 'ccd:4221332d34e1694168c2a0c0b3fd0f27:12802.0',
+    },
+  ])
+  assert.doesNotMatch(agentCardSource, /LLM_API_KEY|WALLET_PRIVATE_KEY|PRIVATE_KEY=/)
+  assert.match(buildSource, /copy\('src\/agent-registry\.mjs', 'dist\/src\/agent-registry\.mjs'\)/)
+  assert.match(buildSource, /'\/\.well-known\/agent-card\.json \/agent-card\.json 200\\n'/)
 })

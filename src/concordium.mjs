@@ -1,5 +1,12 @@
 export const CONCORDIUM_TESTNET_GENESIS_HASH =
   '4221332d34e1694168c2a0c0b3fd0f273809612cb13d000d5c2e00e85f50f796'
+export const AGENT_REGISTRY = Object.freeze({
+  address: Object.freeze({ index: '12802', subindex: '0' }),
+  agentId: 979,
+  owner: '4L6swfbApoVxnvxz1oyEpg3vyjLZjr8AZg2ofEn2ze6mRgbRdb',
+  agentUri: 'https://surplus-bid.netlify.app/.well-known/agent-card.json',
+  metadataHash: '2a680d5d0019f7da8c2abf352f86927352937b1527560dd48ccde61d902c288a',
+})
 export const PLATFORM_ACCOUNT = '4aWGujk9C4b1wF2FPPaVaxVkXA6cQV82kewgzRnK9GQnBSDjP4'
 export const INITIAL_MARKET = Object.freeze({
   guarantee: '2000000',
@@ -210,6 +217,49 @@ export async function submitMarketInitialization(connection, moduleReference, se
     ),
     timeoutMs,
     '等待钱包确认创建实例超时。请在钱包活动中检查原请求，勿重复发送。',
+  )
+  return assertTransactionHash(hash)
+}
+
+export async function submitAgentCardAnchor(connection, { timeoutMs = 120_000 } = {}) {
+  const sdk = requireTransactionSdk()
+  const sender = await verifyWalletAuthorization(connection, timeoutMs)
+  if (sender !== AGENT_REGISTRY.owner) {
+    throw new ConcordiumClientError(
+      'WRONG_AGENT_OWNER',
+      `Agent #${AGENT_REGISTRY.agentId} 由 ${shortAccountAddress(AGENT_REGISTRY.owner)} 注册；请切换到该账户后再锚定 Agent Card。`,
+    )
+  }
+  const response = await fetchWithTimeout('/api/agent-registry/schema', 10_000)
+  if (!response.ok) {
+    throw new ConcordiumClientError('REGISTRY_SCHEMA_UNAVAILABLE', '无法读取 Agent Registry 官方 schema，未发送交易。')
+  }
+  const schemaBase64 = (await response.text()).trim()
+  if (schemaBase64.length === 0) {
+    throw new ConcordiumClientError('REGISTRY_SCHEMA_EMPTY', 'Agent Registry 官方 schema 为空，未发送交易。')
+  }
+  const metadataBytes = hexToBytes(AGENT_REGISTRY.metadataHash)
+  const payload = {
+    amount: sdk.CcdAmount.fromCcd(0),
+    address: sdk.ContractAddress.create(BigInt(AGENT_REGISTRY.address.index), BigInt(AGENT_REGISTRY.address.subindex)),
+    receiveName: sdk.ReceiveName.fromString('CIS-8004.setAgentURI'),
+    maxContractExecutionEnergy: sdk.Energy.create(30_000),
+  }
+  const parameters = {
+    token_id: 'd303000000000000',
+    agent_uri: { Some: [AGENT_REGISTRY.agentUri] },
+    metadata_hash: { Some: [metadataBytes] },
+  }
+  const hash = await withTimeout(
+    connection.provider.sendTransaction(
+      sender,
+      sdk.AccountTransactionType.Update,
+      payload,
+      parameters,
+      schemaBase64,
+    ),
+    timeoutMs,
+    '等待钱包确认 Agent Card 锚定超时。请在钱包活动中检查原请求，勿重复发送。',
   )
   return assertTransactionHash(hash)
 }
