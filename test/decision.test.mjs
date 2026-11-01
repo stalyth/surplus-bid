@@ -185,6 +185,48 @@ test('forced tool call is parsed and validated from an OpenAI-compatible respons
   assert.equal(capturedBody.tools[0].function.name, 'submit_strategy_decision')
 })
 
+test('accepts previous-round allocation metrics as structured model evidence', async () => {
+  const fakeFetch = async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        tool_calls: [{
+          type: 'function',
+          function: {
+            name: 'submit_strategy_decision',
+            arguments: JSON.stringify(proposal({
+              evidence: ['previousSupplyUnits', 'nextSupplyUnits', 'previousRoundOutcome', 'previousRoundAllocatedUnits', 'previousRoundSupplyUnits', 'previousRoundFullyAllocated'],
+            })),
+          },
+        }],
+      },
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  const normalized = normalizeDecisionInput(input())
+  const result = await requestStrategyDecision(normalized, summarizeDecisionInput(normalized), {
+    apiKey: 'test-key',
+    fetchImpl: fakeFetch,
+  })
+  assert.deepEqual(result.evidence, ['previousSupplyUnits', 'nextSupplyUnits', 'previousRoundOutcome', 'previousRoundAllocatedUnits', 'previousRoundSupplyUnits', 'previousRoundFullyAllocated'])
+})
+
+test('records a safe diagnostic when the model cites an unsupported evidence field', async () => {
+  const result = await decideNextReserve('invalid-evidence-case', input(), {
+    apiKey: 'test-key',
+    fetchImpl: async () => new Response(JSON.stringify({
+      choices: [{ message: { tool_calls: [{
+        type: 'function',
+        function: {
+          name: 'submit_strategy_decision',
+          arguments: JSON.stringify(proposal({ evidence: ['soldRate', 'untrusted free-form output'] })),
+        },
+      }] } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    logPath: false,
+  })
+  assert.equal(result.modelError.code, 'INVALID_TOOL_OUTPUT')
+  assert.deepEqual(result.modelError.details, { invalidEvidence: ['<unknown-field>'] })
+})
+
 test('model failure returns the safe action and a recognizable rule override', async () => {
   const result = await decideNextReserve('failure-case', input(), {
     apiKey: 'test-key',
