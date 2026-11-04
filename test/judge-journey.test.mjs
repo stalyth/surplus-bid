@@ -14,7 +14,7 @@ const buildSource = await readFile(new URL('../scripts/build.mjs', import.meta.u
 test('public judge journey contains a current-protocol, linkable Testnet path', () => {
   assert.equal(journey.protocolVersion, 'batch-allocation-v3')
   assert.equal(journey.evidenceStatus, 'verified')
-  assert.equal(journey.chainJourney.instance.index, '13035')
+  assert.equal(journey.chainJourney.instance.index, '13041')
   assert.equal(journey.chainJourney.steps.length, 10)
   assert.deepEqual(journey.chainJourney.steps.map((step) => step.key), [
     'initialize', 'start_round', 'commit_bid_1', 'commit_bid_2', 'commit_bid_3',
@@ -25,13 +25,17 @@ test('public judge journey contains a current-protocol, linkable Testnet path', 
     assert.equal(step.explorerUrl, `https://ccdexplorer.io/testnet/transaction/${step.hash}`)
   }
   assert.deepEqual(journey.chainJourney.result.allocations.map((allocation) => allocation.bidMicroCcd), ['2100000', '2200000'])
-  assert.deepEqual(journey.chainJourney.result.allocations.map((allocation) => allocation.clearingPriceMicroCcd), ['1950000', '2000000'])
+  assert.deepEqual(journey.chainJourney.result.allocations.map((allocation) => allocation.clearingPriceMicroCcd), ['1967500', '2017500'])
+  assert.equal(journey.identityGateEvidence.agentId, 979)
+  assert.equal(journey.identityGateEvidence.startRoundHash, journey.chainJourney.steps[1].hash)
+  assert.equal(journey.identityGateEvidence.onChainEnforced, false)
 })
 
 test('public market history contains only reconciled current-protocol settlements', () => {
   assert.equal(market.protocolVersion, 'batch-allocation-v3')
   assert.equal(market.evidenceStatus, 'verified')
-  assert.equal(market.settlements.length, 5)
+  assert.equal(market.settlements.length, 6)
+  assert.equal(market.settlements[0].instance.index, '13041')
   assert.ok(market.settlements.every((record) => record.version === 2 && record.reconciled === true))
   assert.ok(market.settlements.every((record) => record.service.capacityUnits === 2))
   assert.ok(market.settlements.every((record) => record.transaction.explorerUrl.endsWith(record.transaction.hash)))
@@ -46,7 +50,7 @@ test('judge path names the users, the traded service, and explains transaction s
   assert.match(landing, /AI API 提供方出售即将过期的优先执行容量/)
   assert.match(landing, /Buyer Agents 隐藏报价/)
   assert.match(landing, /交易剩余<\/strong> = 买家报价 − 卖家底价/)
-  assert.match(landing, /https:\/\/ccdexplorer\.io\/testnet\/contract\/13035\/0/)
+  assert.match(landing, /https:\/\/ccdexplorer\.io\/testnet\/contract\/13041\/0/)
   assert.match(landing, /href="\.\/run\/#judge-journey"/)
   assert.ok(runPage.indexOf('id="judge-journey-result"') < runPage.indexOf('id="judge-journey-steps"'))
   assert.match(appSource, /独立策略评测 · 不属于本次/)

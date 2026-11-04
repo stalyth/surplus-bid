@@ -630,6 +630,14 @@ function renderSellerIdentity() {
   heading.append(title, badge)
   const summary = document.createElement('p')
   summary.textContent = `${snapshot.status} · 卡片 SHA-256 ${shortHash(snapshot.metadataHash)} 与链上锚点一致 · Owner ${shortAccountAddress(snapshot.owner)}。这是 ${formatDate(snapshot.verifiedAt)} 提交的静态证据快照，不是持续监控。`
+  const postIdentityWindow = snapshot.postIdentityCapacityWindow
+  const gateSummary = document.createElement('p')
+  if (postIdentityWindow?.instance) {
+    const windowAddress = `<${postIdentityWindow.instance.index},${postIdentityWindow.instance.subindex}>`
+    gateSummary.textContent = `身份快照之后的主证据 ${windowAddress} 已结算且资金核对通过。发布前核验由 local-live 应用强制，拍卖合约本身不查询 Registry。`
+  } else {
+    gateSummary.textContent = '尚未记录身份核验后的容量窗口。'
+  }
   const links = document.createElement('div')
   links.className = 'identity-evidence-links'
   for (const [text, href] of [
@@ -637,6 +645,8 @@ function renderSellerIdentity() {
     ['Agent Card ↗', snapshot.agentCardUrl],
     ['注册交易 ↗', snapshot.registrationTransaction?.explorerUrl],
     ['卡片锚定交易 ↗', snapshot.cardAnchorTransaction?.explorerUrl],
+    ['身份后主证据 ↗', postIdentityWindow?.contractUrl],
+    ['受门控发布交易 ↗', postIdentityWindow?.startRoundTransaction?.explorerUrl],
   ]) {
     if (!href) continue
     const link = document.createElement('a')
@@ -646,7 +656,7 @@ function renderSellerIdentity() {
     link.rel = 'noreferrer'
     links.append(link)
   }
-  card.append(heading, summary, links)
+  card.append(heading, summary, gateSummary, links)
 }
 
 async function refreshSellerIdentityVerification({ required = false, renderAfter = true } = {}) {

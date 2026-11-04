@@ -2,9 +2,33 @@
   "network": "Concordium Testnet",
   "protocolVersion": "batch-allocation-v3",
   "evidenceStatus": "verified",
-  "recordedAt": "2026-10-29T07:37:01.008Z",
+  "recordedAt": "2026-11-01T07:17:30.437Z",
   "dataKind": "Finalized and reconciled settlements for the current dual-capacity protocol. Network fees are excluded from contract settlement accounting.",
   "settlements": [
+    {
+      "version": 2,
+      "outcome": "settled",
+      "settledAt": "2026-11-01T07:17:30.437Z",
+      "instance": { "index": "13041", "subindex": "0" },
+      "contractUrl": "https://ccdexplorer.io/testnet/contract/13041/0",
+      "transaction": { "hash": "f576cb1e684155214c43b1ce71ad2ff2ea9c9a6b6fa550bcb36c5508a80c2293", "explorerUrl": "https://ccdexplorer.io/testnet/transaction/f576cb1e684155214c43b1ce71ad2ff2ea9c9a6b6fa550bcb36c5508a80c2293" },
+      "service": { "id": "dd90e12bd93f12b9247d64471453c58578f860e71dc5e63c1a246d55ce06b84e", "name": "Priority AI Analysis", "capacityUnits": 2 },
+      "allocatedUnits": 2,
+      "winners": [
+        { "bidder": "4akDwpkxtZpgTsbFLGD9ogiFf6JVvpBpaeJDboFZZrGTpabhGP", "clearingPriceMicroCcd": "1967500" },
+        { "bidder": "4jTMeo6sSSEdQWSczordmnSu6fy8Uq1A7aL4UZK6bAgiCs5ePU", "clearingPriceMicroCcd": "2017500" }
+      ],
+      "reserveMicroCcd": "1835000",
+      "averageWinningBidMicroCcd": "2150000",
+      "averageClearingPriceMicroCcd": "1992500",
+      "totalSurplusMicroCcd": "630000",
+      "platformFeeMicroCcd": "63000",
+      "buyerRefundMicroCcd": "283500",
+      "totalRefundMicroCcd": "2283500",
+      "sellerReceivesMicroCcd": "5953500",
+      "totalDepositedMicroCcd": "8300000",
+      "reconciled": true
+    },
     {
       "version": 2,
       "outcome": "settled",

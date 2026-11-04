@@ -33,10 +33,36 @@
     "extensionConformant": true,
     "verifyUrlMatched": true
   },
-  "postIdentityCapacityWindow": null,
+  "postIdentityCapacityWindow": {
+    "evidenceStatus": "verified",
+    "instance": { "index": "13041", "subindex": "0" },
+    "contractUrl": "https://ccdexplorer.io/testnet/contract/13041/0",
+    "serviceId": "dd90e12bd93f12b9247d64471453c58578f860e71dc5e63c1a246d55ce06b84e",
+    "initializedAt": "2026-11-01T07:10:50.437Z",
+    "initializationTransaction": {
+      "hash": "36b91b58618a0487bdd62cc4cc2ea9852d13702c20bbcb9cbed051ff7110208f",
+      "explorerUrl": "https://ccdexplorer.io/testnet/transaction/36b91b58618a0487bdd62cc4cc2ea9852d13702c20bbcb9cbed051ff7110208f"
+    },
+    "startRoundAt": "2026-11-01T07:11:14.437Z",
+    "startRoundTransaction": {
+      "hash": "3611f4971889a46345603ad2f1e5b85df65ddb5c26b8e569dc58237681a1efab",
+      "explorerUrl": "https://ccdexplorer.io/testnet/transaction/3611f4971889a46345603ad2f1e5b85df65ddb5c26b8e569dc58237681a1efab"
+    },
+    "settledAt": "2026-11-01T07:17:30.437Z",
+    "finalizationTransaction": {
+      "hash": "f576cb1e684155214c43b1ce71ad2ff2ea9c9a6b6fa550bcb36c5508a80c2293",
+      "explorerUrl": "https://ccdexplorer.io/testnet/transaction/f576cb1e684155214c43b1ce71ad2ff2ea9c9a6b6fa550bcb36c5508a80c2293"
+    },
+    "result": "Settled",
+    "reconciled": true,
+    "applicationGate": {
+      "requiredChecks": ["status_active", "badge_valid", "card_hash_matched", "wallet_matches_registered_owner"],
+      "onChainEnforced": false
+    }
+  },
   "limitations": [
     "This is a submitted verification snapshot, not continuous monitoring.",
-    "No capacity window created after identity verification has been recorded yet.",
+    "Instance <13041,0> was initialized, started, and settled after the recorded badge verification. The local-live code requires a fresh official badge check before requesting start_round, but this application-layer check is not attested by the auction contract and can be bypassed by a direct contract call.",
     "The badge verifies registry identity and card integrity; it does not prove off-chain API delivery."
   ]
 }

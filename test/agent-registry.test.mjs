@@ -67,12 +67,15 @@ test('invalid Registry response cannot silently enable publishing', () => {
   assert.equal(sellerIdentityAllowsPublish(missingChecks, SELLER_AGENT_IDENTITY.owner), false)
 })
 
-test('submitted identity evidence records only real Registry transactions and marks the post-identity window pending', async () => {
+test('submitted identity evidence links the post-registration primary capacity window without overstating on-chain enforcement', async () => {
   const evidence = JSON.parse(await readFile(new URL('../public/evidence/seller-agent-registry.json', import.meta.url), 'utf8'))
   assert.equal(evidence.evidenceStatus, 'verified')
   assert.equal(evidence.badge, SELLER_AGENT_IDENTITY.badge)
   assert.equal(evidence.metadataHash, SELLER_AGENT_IDENTITY.metadataHash)
   assert.match(evidence.registrationTransaction.hash, /^[0-9a-f]{64}$/)
   assert.match(evidence.cardAnchorTransaction.hash, /^[0-9a-f]{64}$/)
-  assert.equal(evidence.postIdentityCapacityWindow, null)
+  assert.equal(evidence.postIdentityCapacityWindow.instance.index, '13041')
+  assert.match(evidence.postIdentityCapacityWindow.startRoundTransaction.hash, /^[0-9a-f]{64}$/)
+  assert.equal(evidence.postIdentityCapacityWindow.applicationGate.onChainEnforced, false)
+  assert.equal(evidence.postIdentityCapacityWindow.reconciled, true)
 })

@@ -22,7 +22,7 @@
   },
   "limitations": [
     "The inputs are hand-written demo cases, not a statistical sample of a live market.",
-    "The current verified Testnet auction predates this decision layer and is not the same end-to-end run.",
+    "This fixed-case evaluation is independent from the primary <13041,0> Testnet journey and does not prove the provenance of that round's reserve.",
     "The model cannot sign wallet transactions or change contract settlement rules."
   ]
 }

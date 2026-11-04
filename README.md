@@ -114,7 +114,7 @@ pnpm eval:decisions
 - `pnpm build` 生成 `dist/` 中的 `public-readonly`：只展示随仓库提交的脱敏证据 JSON 与 CCDExplorer 链接，不连接钱包，不提供 DeepSeek 或 Testnet 写接口。
 - `pnpm preview` 在 `http://127.0.0.1:4174` 预览公开构建。
 
-公开 `/run` 只读取当前 `batch-allocation-v3` 协议的脱敏证据 JSON。最新 `<13035,0>` 已完成 3 份承诺、统一揭示、双赢家结算与资金核对；`confirmed-market-settlements.json` 收录同协议的 4 条成交和 1 条无成交。旧单赢家实例不会回退展示，也不会混入价格信号。Seller Agent 的固定评测证据独立展示，不声称模型直接签名或提交链上实例。
+公开 `/run` 只读取当前 `batch-allocation-v3` 协议的脱敏证据 JSON。唯一主证据 [`<13041,0>`](https://ccdexplorer.io/testnet/contract/13041/0) 在 Seller Agent `#979` 完成 Registry 注册和 Card 锚定后创建，已完成 `start_round`、3 份承诺、统一揭示、双赢家结算与 8.3 CCD 资金核对；`confirmed-market-settlements.json` 收录同协议的 5 条成交和 1 条无成交。发布前的实时 badge、Card 哈希和 Owner 钱包核验由 `local-live` 应用强制，拍卖合约本身不查询 Registry，直接调用合约可绕过该应用层门控。旧实例仅保留为历史记录，不再作为首页或 `/run` 的主证据。Seller Agent 的固定评测证据独立展示，不声称模型直接签名或证明 `<13041,0>` 底价的来源。
 
 本地页面顶部的“本站交易账户”列表用于明确选择签名地址；“刷新授权账户”重新读取 Concordium Wallet 为本站开放的账户。若目标账户不在列表中，需先在钱包中允许该账户连接本站，再刷新。钱包首页左上角显示的账户不一定是本站获准使用的账户，发送前还应在钱包确认页核对签名地址。
 
