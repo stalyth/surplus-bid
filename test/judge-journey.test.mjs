@@ -47,8 +47,9 @@ test('public judge journey keeps model evaluation separate from future chain pro
 })
 
 test('judge path names the users, the traded service, and explains transaction surplus', () => {
-  assert.match(landing, /AI API 提供方出售即将过期的优先执行容量/)
-  assert.match(landing, /Buyer Agents 隐藏报价/)
+  assert.match(landing, /When Capacity Expires,<br \/>Let Agents Bid for It\./)
+  assert.match(landing, /share transaction surplus under public rules/)
+  assert.match(landing, /容量快过期时，让 Agent 自己出价争取。/)
   assert.match(landing, /交易剩余<\/strong> = 买家报价 − 卖家底价/)
   assert.match(landing, /https:\/\/ccdexplorer\.io\/testnet\/contract\/13041\/0/)
   assert.match(landing, /href="\.\/run\/#judge-journey"/)
