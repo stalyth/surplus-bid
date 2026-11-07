@@ -1,0 +1,28 @@
+name: Check Explorer verifier compatibility
+
+on:
+  push:
+    paths:
+      - .github/workflows/explorer-compat.yml
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download the deployed module
+        run: |
+          curl -fL --retry 3 --retry-all-errors \
+            https://github.com/stalyth/surplus-bid/releases/download/verifiable-v3-3cbea1429e6c-42352242563-1/module.wasm.v1 \
+            -o module.wasm.v1
+          sha256sum module.wasm.v1
+
+      - name: Reproduce CCDExplorer's verifier image
+        run: |
+          docker run --rm sderuiter/concordium-tools:8.0.0 cargo concordium --version
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" -w /work \
+            sderuiter/concordium-tools:8.0.0 \
+            cargo concordium verify-build --module module.wasm.v1
