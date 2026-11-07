@@ -29,7 +29,9 @@ jobs:
           curl -fL --retry 3 --retry-all-errors \
             'https://github.com/Concordium/concordium-smart-contract-tools/releases/download/releases%2Fcargo-concordium%2F4.2.0/cargo-concordium-darwin-amd64' \
             -o "$RUNNER_TEMP/cargo-concordium"
+          mkdir -p "$HOME/.cargo/bin"
           install -m 755 "$RUNNER_TEMP/cargo-concordium" "$HOME/.cargo/bin/cargo-concordium"
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo concordium --version
           cargo concordium build --out "$RUNNER_TEMP/primary-rebuilt.wasm.v1" \
             --schema-out "$RUNNER_TEMP/primary-schema.bin" -- --locked
