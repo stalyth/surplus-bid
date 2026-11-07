@@ -20,9 +20,9 @@ jobs:
 
       - name: Reproduce CCDExplorer's verifier image
         run: |
-          docker run --rm sderuiter/concordium-tools:8.0.0 cargo concordium --version
+          docker run --rm sderuiter/concordium-tools:8.0.0 --version
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/work" -w /work \
             sderuiter/concordium-tools:8.0.0 \
-            cargo concordium verify-build --module module.wasm.v1
+            verify-build --module module.wasm.v1
