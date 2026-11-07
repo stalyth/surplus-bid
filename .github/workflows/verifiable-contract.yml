@@ -1,0 +1,56 @@
+name: Build verifiable auction module
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Concordium build tools
+        run: |
+          rustup toolchain install 1.85.1 --profile minimal --target wasm32-unknown-unknown
+          cargo install --locked --version 4.2.0 cargo-concordium
+          cargo concordium --version
+
+      - name: Test and build in the official reproducible image
+        working-directory: contracts/sealed-auction
+        run: |
+          cargo test --locked
+          cargo concordium build \
+            --verifiable docker.io/concordium/verifiable-sc:1.85.0 \
+            --out module.wasm.v1 \
+            --schema-out schema.bin \
+            -- --locked
+          test -s module.wasm.v1
+          test -s module.wasm.v1.tar
+          test -s schema.bin
+          tar -tf module.wasm.v1.tar
+
+      - name: Publish source and verified module
+        working-directory: contracts/sealed-auction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="verifiable-v3-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" module.wasm.v1.tar \
+            --target "$GITHUB_SHA" \
+            --title "SurplusBid verifiable auction module $tag" \
+            --notes "Concordium Testnet candidate. The source archive is embedded by hash in the module; no instance is claimed by this release alone."
+          source_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/module.wasm.v1.tar"
+          cargo concordium edit-build-info \
+            --module module.wasm.v1 \
+            --source-link "$source_url" \
+            --verify
+          cargo concordium print-build-info --module module.wasm.v1
+          cargo concordium verify-build --module module.wasm.v1
+          sha256sum module.wasm.v1 module.wasm.v1.tar schema.bin > SHA256SUMS
+          gh release upload "$tag" module.wasm.v1 schema.bin SHA256SUMS
+          cat SHA256SUMS
+          echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
