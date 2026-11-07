@@ -16,13 +16,15 @@ jobs:
       - name: Install Concordium build tools
         run: |
           rustup toolchain install 1.85.1 --profile minimal --target wasm32-unknown-unknown
-          cargo install --locked --version 4.2.0 cargo-concordium
+          curl -fL --retry 3 --retry-all-errors \
+            'https://github.com/Concordium/concordium-smart-contract-tools/releases/download/releases%2Fcargo-concordium%2F4.2.0/cargo-concordium-linux-amd64' \
+            -o "$RUNNER_TEMP/cargo-concordium"
+          install -m 755 "$RUNNER_TEMP/cargo-concordium" "$HOME/.cargo/bin/cargo-concordium"
           cargo concordium --version
 
       - name: Test and build in the official reproducible image
         working-directory: contracts/sealed-auction
         run: |
-          cargo test --locked
           cargo concordium build \
             --verifiable docker.io/concordium/verifiable-sc:1.85.0 \
             --out module.wasm.v1 \
@@ -32,6 +34,7 @@ jobs:
           test -s module.wasm.v1.tar
           test -s schema.bin
           tar -tf module.wasm.v1.tar
+          cargo test --locked
 
       - name: Publish source and verified module
         working-directory: contracts/sealed-auction
