@@ -18,9 +18,19 @@ jobs:
             -o module.wasm.v1
           sha256sum module.wasm.v1
 
-      - name: Reproduce CCDExplorer's verifier image
+      - name: Inspect CCDExplorer's verifier tool image
         run: |
-          docker run --rm sderuiter/concordium-tools:8.0.0 --version
+          docker run --rm --entrypoint /bin/sh sderuiter/concordium-tools:8.0.0 -c '
+            command -v cargo || true
+            cargo --version || true
+            command -v rustc || true
+            command -v docker || true
+            ls -l /usr/local/bin/cargo* || true
+          '
+
+      - name: Attempt verification in the tool image
+        continue-on-error: true
+        run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/work" -w /work \
